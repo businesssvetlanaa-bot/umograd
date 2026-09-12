@@ -74,7 +74,7 @@ async function seedSystemCurricula() {
     const topics = topicsData.subjects[subjectKey]
 
     const existing = await prisma.curriculum.findFirst({
-      where: { is_system: true, subject, grade: topicsData.grade },
+      where: { is_system: true, subject },
     })
 
     const topicsJson = topics.map((t) => ({
@@ -87,13 +87,13 @@ async function seedSystemCurricula() {
     if (existing) {
       await prisma.curriculum.update({
         where: { id: existing.id },
-        data: { topics: topicsJson },
+        data: { name: `Стандартная ФГОС — ${subjectNames[subjectKey]}, ${topicsData.grade} класс`, grade: topicsData.grade, topics: topicsJson },
       })
       console.log(`  ✏️  Обновлена программа: ${subjectNames[subjectKey]}`)
     } else {
       await prisma.curriculum.create({
         data: {
-          name: `Стандартная ФГОС — ${subjectNames[subjectKey]}, 3 класс`,
+          name: `Стандартная ФГОС — ${subjectNames[subjectKey]}, ${topicsData.grade} класс`,
           grade: topicsData.grade,
           subject,
           is_system: true,

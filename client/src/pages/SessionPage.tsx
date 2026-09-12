@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useLocation, Link } from 'react-router-dom'
 import confetti from 'canvas-confetti'
 import { sessionsApi, type Message, type SessionData } from '../api/sessions'
+import timMascot from '../assets/tim-mascot.png'
 
 interface BrowserSpeechRecognitionEvent extends Event {
   results: ArrayLike<{ 0: { transcript: string } }>
@@ -429,7 +430,7 @@ export default function SessionPage() {
       <div className="min-h-screen flex flex-col items-center justify-center gap-4 p-8" style={{ background: 'var(--color-bg)' }}>
         <p className="text-red-500 text-center">{loadError}</p>
         <button
-          onClick={() => navigate(`/child/${id}/homework`)}
+          onClick={() => navigate(`/child/${id}/tutor`)}
           className="px-6 py-3 rounded-xl font-bold text-white"
           style={{ background: 'var(--color-primary)' }}
         >
@@ -452,11 +453,11 @@ export default function SessionPage() {
   const topicTitle  = session.topic?.title ?? subjectName
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: 'var(--color-bg)' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: 'radial-gradient(circle at 10% 0%, #dbeafe 0, transparent 24%), radial-gradient(circle at 90% 10%, #ccfbf1 0, transparent 22%), #f5f7ff' }}>
 
       {/* ─── Верхняя панель ─── */}
-      <div className="sticky top-0 z-10 bg-white shadow-sm px-4 py-3 flex items-center gap-3">
-        <Link to={`/child/${id}/homework`} className="text-gray-400 hover:text-gray-600 text-xl leading-none">
+      <div className="sticky top-0 z-10 border-b border-white/80 bg-white/90 px-4 py-3 flex items-center gap-3 shadow-sm backdrop-blur-xl">
+        <Link to={`/child/${id}/tutor`} className="text-gray-400 hover:text-gray-600 text-xl leading-none">
           ←
         </Link>
         <span className="text-2xl">{subjectIcon}</span>
@@ -475,18 +476,18 @@ export default function SessionPage() {
       </div>
 
       {/* ─── Чат ─── */}
-      <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4">
+      <div className="flex-1 overflow-y-auto px-4 py-5 flex flex-col gap-4 w-full max-w-4xl mx-auto">
 
         {/* Аватар и имя репетитора */}
-        <div className="flex items-center gap-3 mb-2">
+        <div className="flex items-center gap-3 mb-2 rounded-2xl border border-white bg-white/80 p-3 shadow-sm backdrop-blur">
           <div
-            className="w-14 h-14 rounded-xl flex items-center justify-center text-3xl shadow-sm flex-shrink-0"
+            className="w-14 h-14 rounded-2xl overflow-hidden shadow-sm flex-shrink-0 bg-indigo-950"
             style={{ background: 'var(--color-primary)' }}
           >
-            🎓
+            <img src={timMascot} alt="Тим" className="h-full w-full object-cover object-top" />
           </div>
           <div>
-            <div className="font-bold text-gray-800">Профессор Куб</div>
+            <div className="font-bold text-gray-800">Тим</div>
             <div className="text-xs text-gray-400">Твой репетитор</div>
           </div>
         </div>
@@ -499,10 +500,10 @@ export default function SessionPage() {
           >
             {msg.role === 'assistant' && (
               <div
-                className="w-9 h-9 rounded-lg flex items-center justify-center text-lg flex-shrink-0 mr-2 self-end"
+                className="w-9 h-9 rounded-xl overflow-hidden flex-shrink-0 mr-2 self-end bg-indigo-950 shadow-sm"
                 style={{ background: 'var(--color-primary)' }}
               >
-                🎓
+                <img src={timMascot} alt="" className="h-full w-full object-cover object-top" />
               </div>
             )}
             <div className="max-w-[85%]">
@@ -511,7 +512,7 @@ export default function SessionPage() {
                 style={
                   msg.role === 'user'
                     ? { background: 'var(--color-primary)', color: 'white', borderBottomRightRadius: 4 }
-                    : { background: '#F0F4FF', color: '#1e293b', borderBottomLeftRadius: 4 }
+                    : { background: 'rgba(255,255,255,.94)', color: '#1e293b', borderBottomLeftRadius: 4, border: '1px solid #E0E7FF', boxShadow: '0 8px 24px rgba(49,46,129,.06)' }
                 }
               >
                 {msg.content}
@@ -523,7 +524,7 @@ export default function SessionPage() {
                     onClick={() => speakMessage(msg)}
                     className="text-xs font-semibold text-indigo-700 bg-indigo-50 rounded-lg px-2.5 py-1.5 active:scale-95"
                   >
-                    {speakingMessageId === msg.id ? '⏹ Остановить' : '🔊 Прочитать'}
+                    {speakingMessageId === msg.id ? '⏹ Остановить' : '🔊 Прослушать'}
                   </button>
                   {session.subject === 'english' && extractEnglishWords(msg.content) && (
                     <button
@@ -557,7 +558,7 @@ export default function SessionPage() {
       </div>
 
       {/* ─── Поле ввода ─── */}
-      <div className="sticky bottom-0 bg-white border-t border-gray-100 px-4 py-3">
+      <div className="sticky bottom-0 border-t border-white/80 bg-white/92 px-4 py-3 shadow-[0_-8px_30px_rgba(49,46,129,.06)] backdrop-blur-xl">
         {/* Скрытый input для камеры */}
         <input
           ref={photoInputRef}

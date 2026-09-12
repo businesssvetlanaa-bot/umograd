@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { sessionsApi } from '../api/sessions'
+import timMascot from '../assets/tim-mascot.png'
 
 type InputMode = 'subject' | 'activity' | 'choose' | 'preview' | 'text' | 'topic'
 type Subject = 'math' | 'russian' | 'english'
@@ -39,7 +40,7 @@ async function prepareImage(file: File): Promise<{ base64: string; mimeType: 'im
   return { base64: dataUrl.split(',')[1] ?? '', mimeType: 'image/jpeg' }
 }
 
-export default function HomeworkPage() {
+export default function TutorPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
 
@@ -134,7 +135,7 @@ export default function HomeworkPage() {
       >
         <div className="text-7xl animate-bounce">🎓</div>
         <p className="text-xl font-bold text-gray-700 text-center px-4">
-          Профессор Куб читает задание...
+          Тим готовит занятие...
         </p>
         <div className="flex gap-2 mt-2">
           {[0, 1, 2].map(i => (
@@ -154,9 +155,8 @@ export default function HomeworkPage() {
 
   return (
     <div
-      className="min-h-screen flex flex-col items-center px-4 py-8"
-      style={{ background: 'var(--color-bg)' }}
-    >
+      className="min-h-screen flex flex-col items-center px-4 py-6 sm:py-8 bg-[radial-gradient(circle_at_12%_0%,#dbeafe_0,transparent_28%),radial-gradient(circle_at_88%_8%,#ccfbf1_0,transparent_25%),#f5f7ff]"
+      >
       {/* Скрытые input-элементы */}
       <input
         ref={cameraRef}
@@ -175,22 +175,25 @@ export default function HomeworkPage() {
       />
 
       {/* Шапка */}
-      <div className="w-full max-w-lg mb-8">
+      <div className="w-full max-w-3xl mb-6">
         <button
           onClick={() => navigate(`/child/${id}/world`)}
           className="flex items-center gap-2 text-gray-500 hover:text-gray-700 text-sm font-semibold mb-4 transition-colors"
         >
           ← В мой мир
         </button>
-        <div className="text-center">
-          <h1 className="text-2xl font-bold text-gray-800 mb-1">Занятие с Профессором Кубом 🎓</h1>
-          <p className="text-gray-500 text-sm">
-            Сначала выбери предмет и цель занятия
+        <div className="relative overflow-hidden rounded-[28px] bg-[linear-gradient(135deg,#312e81,#0f766e)] px-6 py-6 text-left shadow-xl sm:px-8">
+          <span className="absolute left-[44%] top-4 text-amber-300">✦</span>
+          <img src={timMascot} alt="Тим" className="absolute -bottom-20 right-1 w-40 drop-shadow-xl sm:-bottom-28 sm:right-4 sm:w-56" style={{ maskImage: 'linear-gradient(to bottom, black 72%, transparent 99%)' }} />
+          <p className="mb-1 text-xs font-black uppercase tracking-[.18em] text-amber-300">Репетитор Умограда</p>
+          <h1 className="relative z-10 max-w-[68%] text-2xl font-black text-white mb-1 sm:text-3xl">Занятие с Тимом 🎓</h1>
+          <p className="relative z-10 max-w-[65%] text-indigo-100 text-sm">
+            Выбери предмет и скажи, с чем помочь
           </p>
         </div>
       </div>
 
-      <div className="w-full max-w-lg flex flex-col gap-4">
+      <div className="w-full max-w-3xl flex flex-col gap-4 rounded-[28px] border border-white bg-white/75 p-4 shadow-[0_18px_50px_rgba(49,46,129,.1)] backdrop-blur sm:p-6">
 
         {mode === 'subject' && (
           <>
@@ -276,7 +279,7 @@ export default function HomeworkPage() {
               <span className="text-4xl">📷</span>
               <div>
                 <div className="font-bold text-gray-800 text-lg">Сфотографировать</div>
-                <div className="text-gray-500 text-sm">Открою камеру</div>
+                <div className="relative z-10 max-w-[65%] text-indigo-100 text-sm">Открою камеру</div>
               </div>
             </button>
 
@@ -287,7 +290,7 @@ export default function HomeworkPage() {
               <span className="text-4xl">🖼️</span>
               <div>
                 <div className="font-bold text-gray-800 text-lg">Выбрать из галереи</div>
-                <div className="text-gray-500 text-sm">Выберу фото с устройства</div>
+                <div className="relative z-10 max-w-[65%] text-indigo-100 text-sm">Выберу фото с устройства</div>
               </div>
             </button>
 
@@ -298,7 +301,7 @@ export default function HomeworkPage() {
               <span className="text-4xl">✏️</span>
               <div>
                 <div className="font-bold text-gray-800 text-lg">Написать текст</div>
-                <div className="text-gray-500 text-sm">Введу задание вручную</div>
+                <div className="relative z-10 max-w-[65%] text-indigo-100 text-sm">Введу задание вручную</div>
               </div>
             </button>
           </>

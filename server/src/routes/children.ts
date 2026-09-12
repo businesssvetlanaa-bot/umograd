@@ -68,6 +68,7 @@ router.post('/', authMiddleware, requireParent, async (req: AuthRequest, res: Re
     grade?: number
     avatar_type?: string
     avatar_color?: string
+    direct_answer_allowed?: boolean
     pin?: string
   }
 
@@ -165,6 +166,7 @@ router.get('/:id/dashboard', authMiddleware, async (req: AuthRequest, res: Respo
       coins:            child.coins,
       streak_days:      child.streak_days,
       last_active:      child.last_active,
+      direct_answer_allowed: child.direct_answer_allowed,
       subject_progress: child.subject_progress,
       buildings:        child.buildings,
     })
@@ -308,11 +310,12 @@ router.post('/:id/buildings', authMiddleware, async (req: AuthRequest, res: Resp
 // PUT /api/children/:id — обновить имя или аватар
 router.put('/:id', authMiddleware, requireParent, async (req: AuthRequest, res: Response): Promise<void> => {
   const childId = req.params['id'] as string
-  const { name, grade, avatar_type, avatar_color } = req.body as {
+  const { name, grade, avatar_type, avatar_color, direct_answer_allowed } = req.body as {
     name?: string
     grade?: number
     avatar_type?: string
     avatar_color?: string
+    direct_answer_allowed?: boolean
   }
 
   try {
@@ -329,6 +332,7 @@ router.put('/:id', authMiddleware, requireParent, async (req: AuthRequest, res: 
         ...(grade === 3 || grade === 4 ? { grade } : {}),
         ...(avatar_type  ? { avatar_type }       : {}),
         ...(avatar_color ? { avatar_color }       : {}),
+        ...(typeof direct_answer_allowed === 'boolean' ? { direct_answer_allowed } : {}),
       },
     })
     res.json(updated)

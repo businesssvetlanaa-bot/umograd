@@ -1,13 +1,13 @@
-# EduQuest — AI-репетитор для 3 класса
+# Умоград — игровой ИИ-репетитор для 4 класса
 
-Игровой AI-репетитор в стиле Minecraft для детей 3 класса: математика, русский язык, английский.
+Игровой AI-репетитор в стиле Minecraft для детей 4 класса: математика, русский язык, английский.
 
 ## Стек
 
 - **Client:** React + TypeScript + Vite + Tailwind CSS v4 + React Router
 - **Server:** Node.js + Express + TypeScript + Prisma ORM
 - **AI:** Anthropic Claude API
-- **DB:** PostgreSQL
+- **DB:** SQLite для локального тестирования
 - **Storage:** Cloudflare R2
 
 ## Быстрый старт
@@ -35,20 +35,21 @@ cp .env.example server/.env
 ```bash
 cd server
 npm run db:generate   # Генерация Prisma Client
-npm run db:migrate    # Применить миграции
+npm run db:init:local # Создать локальную базу
+npm run db:seed       # Загрузить учебные темы
 ```
 
 ### 4. Запуск
 
 ```bash
-# Server (порт 5000)
+# Server (порт 5001)
 cd server && npm run dev
 
-# Client (порт 3000) — в другом терминале
+# Client (порт 3001) — в другом терминале
 cd client && npm run dev
 ```
 
-Открой [http://localhost:3000](http://localhost:3000)
+Открой [http://127.0.0.1:3001](http://127.0.0.1:3001)
 
 ## Структура проекта
 

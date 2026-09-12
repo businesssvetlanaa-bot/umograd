@@ -497,7 +497,7 @@ function CurriculumTab() {
             {upload.loading ? (
               <div className="flex flex-col items-center gap-4 py-10 px-6">
                 <div className="text-5xl animate-bounce">🎓</div>
-                <p className="font-semibold text-gray-700">Профессор Куб анализирует программу...</p>
+                <p className="font-semibold text-gray-700">Тим анализирует программу...</p>
                 <p className="text-sm text-gray-400 text-center">Обычно это занимает 10–20 секунд</p>
               </div>
             ) : (
@@ -631,6 +631,8 @@ export default function ParentChildPage() {
   const [child, setChild]     = useState<ChildDashboard | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<Tab>('progress')
+  const [savingHelpMode, setSavingHelpMode] = useState(false)
+  const [helpModeError, setHelpModeError] = useState('')
 
   useEffect(() => {
     if (!id) return
@@ -638,6 +640,21 @@ export default function ParentChildPage() {
       .then((d) => { setChild(d); setLoading(false) })
       .catch(() => setLoading(false))
   }, [id])
+
+  async function toggleHelpMode() {
+    if (!id || !child || savingHelpMode) return
+    const nextValue = !child.direct_answer_allowed
+    setSavingHelpMode(true)
+    setHelpModeError('')
+    try {
+      await childrenApi.update(id, { direct_answer_allowed: nextValue })
+      setChild({ ...child, direct_answer_allowed: nextValue })
+    } catch (error: unknown) {
+      setHelpModeError(error instanceof Error ? error.message : 'Не удалось изменить режим помощи')
+    } finally {
+      setSavingHelpMode(false)
+    }
+  }
 
   if (loading) {
     return (
@@ -695,6 +712,33 @@ export default function ParentChildPage() {
 
       {/* Content */}
       <main className="max-w-2xl mx-auto px-4 py-6">
+        {child && (
+          <section className="mb-5 rounded-2xl border border-indigo-100 bg-white p-4 shadow-sm">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="font-bold text-gray-800">Как Тим помогает с заданиями</h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  {child.direct_answer_allowed
+                    ? 'Быстрая помощь включена: Тим может показать полное решение и обязательно объяснит каждый шаг.'
+                    : 'Обычный режим: Тим объясняет тему, даёт подсказки и помогает ребёнку найти ответ.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={toggleHelpMode}
+                disabled={savingHelpMode}
+                className={`shrink-0 rounded-xl px-4 py-2.5 text-sm font-bold text-white transition disabled:opacity-50 ${child.direct_answer_allowed ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'}`}
+              >
+                {savingHelpMode
+                  ? 'Сохраняем…'
+                  : child.direct_answer_allowed
+                    ? '✓ Быстрая помощь включена'
+                    : 'Включить быструю помощь'}
+              </button>
+            </div>
+            {helpModeError && <p className="mt-3 text-sm font-semibold text-red-600">{helpModeError}</p>}
+          </section>
+        )}
         {id && activeTab === 'progress'   && <ProgressTab childId={id} />}
         {id && activeTab === 'sessions'   && <SessionsTab childId={id} />}
         {id && activeTab === 'weak'       && <WeakSpotsTab childId={id} />}

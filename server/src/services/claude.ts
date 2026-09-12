@@ -5,7 +5,7 @@ const MODEL = configuredModel.replace('claude-sonnet-4-6', 'claude-sonnet-4.6')
 
 function getClient() {
   if (!process.env.ANTHROPIC_API_KEY) {
-    throw new Error('Не настроен ключ AI-провайдера')
+    throw new Error('Распознавание фотографий появится после подключения AI. Пока напишите задание текстом.')
   }
   return new Anthropic({
     apiKey: process.env.ANTHROPIC_API_KEY,
@@ -97,12 +97,40 @@ export async function recognizeAnswer(
   return response.content[0].type === 'text' ? response.content[0].text.trim() : 'не разборчиво'
 }
 
+function localTutorReply(
+  systemPrompt: string,
+  history: Array<{ role: 'user' | 'assistant'; content: string }>,
+): string {
+  const directHelp = systemPrompt.includes('РЕЖИМ «БЫСТРАЯ ПОМОЩЬ»')
+  const task = systemPrompt.match(/Цель занятия или задание ребёнка: ([\s\S]*?)\n\n━━━/)?.[1]?.trim()
+    ?? 'эту тему'
+  const lastMessage = history.at(-1)?.content.trim() ?? ''
+
+  if (history.length <= 1) {
+    return directHelp
+      ? `Сейчас включена быстрая помощь. Разберём «${task}» по шагам: сначала определим правило, затем применим его и проверим ответ. Напиши, какое место вызывает больше всего вопросов — и я покажу полный разбор. 🧭`
+      : `Давай спокойно разберёмся с темой «${task}» вместе. Сначала вспомним подходящее правило, а затем сделаем один маленький шаг. Что ты уже знаешь или успел попробовать? 🌟`
+  }
+
+  if (/готово|понял|поняла|получилось|спасибо/i.test(lastMessage)) {
+    return 'Здорово! Ты прошёл это занятие до конца и сделал важный шаг. Продолжай в том же духе! 🏆\n\n{"session_complete": true, "xp_earned": 60, "coins_earned": 50}'
+  }
+
+  return directHelp
+    ? 'Покажу способ: 1) выпиши известные данные, 2) выбери подходящее правило, 3) выполни действие, 4) проверь результат обратным действием. Пришли само выражение или предложение — разберём его полностью. ✨'
+    : 'Хорошее начало! Найди в задании главное известное число или ключевое слово. Какое действие или правило оно тебе подсказывает? 💡'
+}
+
 // ─── Диалог с репетитором ─────────────────────────────────────────────────────
 
 export async function chatWithTutor(
   systemPrompt: string,
   history: Array<{ role: 'user' | 'assistant'; content: string }>,
 ): Promise<string> {
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return localTutorReply(systemPrompt, history)
+  }
+
   const client = getClient()
 
   const response = await client.messages.create({

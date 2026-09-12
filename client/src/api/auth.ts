@@ -1,18 +1,4 @@
-const BASE = '/api'
-
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('token')
-  const res = await fetch(BASE + path, {
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
-    ...options,
-  })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || 'Ошибка сервера')
-  return data
-}
+import { apiRequest as request } from './request'
 
 export const authApi = {
   register: (body: { name: string; email: string; password: string }) =>

@@ -46,7 +46,7 @@ export default function ParentDashboard() {
       {/* ── Header ── */}
       <header className="bg-white border-b border-gray-100 px-6 py-4 flex items-center justify-between sticky top-0 z-10">
         <div className="flex items-center gap-3">
-          <span className="font-pixel text-sm" style={{ color: 'var(--color-primary)' }}>EduQuest</span>
+          <span className="font-pixel text-sm" style={{ color: 'var(--color-primary)' }}>Умоград</span>
           <span className="text-gray-300">|</span>
           <span className="text-gray-600 font-semibold text-sm">Кабинет родителя</span>
         </div>

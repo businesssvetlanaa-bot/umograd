@@ -13,7 +13,7 @@ export async function findTopic(subject: string, taskText: string) {
   if (!subjectEnum) return null
 
   const topics = await prisma.topic.findMany({
-    where: { subject: subjectEnum, grade: 3 },
+    where: { subject: subjectEnum, grade: 4 },
     orderBy: { order: 'asc' },
   })
 
@@ -25,7 +25,10 @@ export async function findTopic(subject: string, taskText: string) {
 
   for (const topic of topics) {
     let score = 0
-    for (const kw of topic.keywords) {
+    const keywords = Array.isArray(topic.keywords)
+      ? topic.keywords.filter((value): value is string => typeof value === 'string')
+      : []
+    for (const kw of keywords) {
       if (haystack.includes(kw.toLowerCase())) score++
     }
     // также проверяем совпадение с названием темы

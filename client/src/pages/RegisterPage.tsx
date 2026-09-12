@@ -1,11 +1,15 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import timMascot from '../assets/tim-mascot.png'
+
+function EyeIcon({ open }: { open: boolean }) {
+  return open ? '🙈' : '👁️'
+}
 
 export default function RegisterPage() {
   const navigate = useNavigate()
   const { register } = useAuth()
-
   const [form, setForm] = useState({ name: '', email: '', password: '', confirm: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -23,100 +27,96 @@ export default function RegisterPage() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    const err = validate()
-    if (err) { setError(err); return }
-
-    setError('')
-    setLoading(true)
+    const validationError = validate()
+    if (validationError) { setError(validationError); return }
+    setError(''); setLoading(true)
     try {
       await register(form.name.trim(), form.email.trim(), form.password)
       navigate('/onboarding')
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Ошибка сервера. Попробуйте позже')
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
   }
 
-  const EyeIcon = ({ open }: { open: boolean }) => open ? (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-      <path strokeLinecap="round" strokeLinejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.477 0 8.268 2.943 9.542 7-1.274 4.057-5.065 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-    </svg>
-  ) : (
-    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.477 0-8.268-2.943-9.542-7a9.97 9.97 0 012.099-3.56M6.228 6.228A9.97 9.97 0 0112 5c4.477 0 8.268 2.943 9.542 7a9.97 9.97 0 01-4.342 5.311M6.228 6.228L3 3m3.228 3.228l3.65 3.65M17.772 17.772l3.228 3.228m-3.228-3.228l-3.65-3.65" />
-    </svg>
-  )
-
-  const field = (label: string, key: keyof typeof form, type = 'text', placeholder = '', show?: boolean, onToggle?: () => void) => (
-    <div className="flex flex-col gap-1">
-      <label className="text-sm font-semibold text-gray-700">{label}</label>
-      <div className="relative">
-        <input
-          type={type === 'password' ? (show ? 'text' : 'password') : type}
-          placeholder={placeholder}
-          value={form[key]}
-          onChange={(e) => setForm((f) => ({ ...f, [key]: e.target.value }))}
-          className="w-full border border-gray-300 rounded-xl px-4 py-3 text-base outline-none focus:border-[var(--color-primary)] focus:ring-2 focus:ring-[var(--color-primary)]/20 transition"
-          style={{ paddingRight: type === 'password' ? '48px' : undefined }}
-          autoComplete={type === 'password' ? 'new-password' : undefined}
-        />
-        {type === 'password' && onToggle && (
-          <button type="button" onClick={onToggle} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition">
-            <EyeIcon open={!!show} />
-          </button>
-        )}
-      </div>
-    </div>
-  )
+  const inputClass = 'w-full rounded-2xl border-2 border-slate-200 bg-slate-50/80 px-4 py-3.5 text-base outline-none transition placeholder:text-slate-400 focus:border-indigo-500 focus:bg-white focus:ring-4 focus:ring-indigo-100'
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4" style={{ background: 'var(--color-bg)' }}>
-      <div className="w-full max-w-md">
-        {/* Лого */}
-        <div className="text-center mb-8">
-          <h1 className="font-pixel text-xl mb-2" style={{ color: 'var(--color-primary)' }}>EduQuest</h1>
-          <p className="text-gray-500 text-sm">Игровой AI-репетитор для 4 класса</p>
+    <main className="min-h-screen bg-[#eef3ff] lg:grid lg:grid-cols-[.9fr_1.1fr]">
+      <section className="relative min-h-[270px] overflow-hidden bg-[linear-gradient(150deg,#172554,#312e81_55%,#0f766e)] px-6 py-6 text-white sm:min-h-[320px] sm:px-10 lg:flex lg:min-h-screen lg:flex-col lg:justify-between lg:px-14 lg:py-10">
+        <div className="absolute -left-24 bottom-[-80px] h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl" />
+        <div className="absolute -right-20 top-[-90px] h-72 w-72 rounded-full bg-fuchsia-400/20 blur-3xl" />
+        <span className="absolute left-[12%] top-[28%] text-amber-300">✦</span>
+        <span className="absolute right-[12%] top-[15%] text-cyan-200">✦</span>
+
+        <Link to="/login" className="relative z-10 flex w-fit items-center gap-3 text-white">
+          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-amber-300 text-2xl shadow-lg">🏰</span>
+          <span>
+            <span className="block text-2xl font-black">Умоград</span>
+            <span className="block text-[10px] font-bold uppercase tracking-[.18em] text-cyan-100/80">город, который строят знания</span>
+          </span>
+        </Link>
+
+        <div className="relative z-10 mt-7 max-w-[65%] lg:mt-auto lg:max-w-md">
+          <p className="mb-2 text-xs font-black uppercase tracking-[.18em] text-amber-300">Для родителей</p>
+          <h1 className="text-3xl font-black leading-tight sm:text-4xl lg:text-5xl">Откройте ребёнку мир знаний</h1>
+          <p className="mt-4 hidden text-base leading-relaxed text-indigo-100 sm:block">
+            Создайте семейный аккаунт, добавьте героя ребёнка и наблюдайте за его учебными открытиями.
+          </p>
         </div>
 
-        <div className="bg-white rounded-2xl shadow-md p-5 sm:p-8">
-          <h2 className="text-2xl font-bold text-gray-800 mb-6">Создать аккаунт</h2>
+        <div className="absolute -bottom-24 right-[-18px] z-[5] w-44 sm:-bottom-32 sm:w-56 lg:-bottom-16 lg:right-[-7%] lg:w-[58%]">
+          <img src={timMascot} alt="Тим приглашает в Умоград" className="w-full drop-shadow-[0_18px_30px_rgba(0,0,0,.28)]" style={{ maskImage: 'linear-gradient(to bottom, black 74%, transparent 99%)' }} />
+        </div>
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {field('Ваше имя', 'name', 'text', 'Как вас зовут?')}
-            {field('Email', 'email', 'email', 'example@mail.ru')}
-            {field('Пароль', 'password', 'password', 'Минимум 8 символов', showPass, () => setShowPass(v => !v))}
-            {field('Повторите пароль', 'confirm', 'password', 'Введите пароль ещё раз', showConfirm, () => setShowConfirm(v => !v))}
+        <div className="relative z-10 mt-7 hidden flex-wrap gap-2 lg:flex">
+          {['🛡️ Родитель управляет профилем', '🎓 Репетитор не решает за ребёнка', '🏆 Учёба превращается в игру'].map((item) => (
+            <span key={item} className="rounded-full border border-white/15 bg-white/10 px-3 py-2 text-xs font-bold backdrop-blur">{item}</span>
+          ))}
+        </div>
+      </section>
 
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 rounded-xl px-4 py-3 text-sm">
-                {error}
+      <section className="relative z-20 flex items-center justify-center px-4 pb-8 sm:px-8 lg:min-h-screen lg:p-10">
+        <div className="-mt-5 w-full max-w-xl rounded-[28px] border border-white/80 bg-white/95 p-5 shadow-[0_24px_70px_rgba(49,46,129,.16)] backdrop-blur-xl sm:-mt-8 sm:p-8 lg:mt-0">
+          <Link to="/login" className="mb-5 inline-flex items-center gap-2 text-sm font-bold text-slate-500 transition hover:text-indigo-600">← Вернуться ко входу</Link>
+          <p className="mb-1 text-xs font-black uppercase tracking-[.18em] text-indigo-500">Шаг 1 из 2</p>
+          <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">Аккаунт родителя</h2>
+          <p className="mt-2 text-sm leading-relaxed text-slate-500">Почта нужна только взрослому. У ребёнка будет отдельный герой и PIN-код.</p>
+
+          <form onSubmit={handleSubmit} className="mt-6 grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <label className="mb-1.5 block text-sm font-bold text-slate-700" htmlFor="register-name">Как к вам обращаться</label>
+              <input id="register-name" type="text" autoComplete="name" placeholder="Например, Светлана" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} className={inputClass} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1.5 block text-sm font-bold text-slate-700" htmlFor="register-email">Email</label>
+              <input id="register-email" type="email" autoComplete="email" placeholder="example@mail.ru" value={form.email} onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))} className={inputClass} />
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-bold text-slate-700" htmlFor="register-password">Пароль</label>
+              <div className="relative">
+                <input id="register-password" type={showPass ? 'text' : 'password'} autoComplete="new-password" placeholder="Минимум 8 символов" value={form.password} onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))} className={`${inputClass} pr-12`} />
+                <button type="button" aria-label={showPass ? 'Скрыть пароль' : 'Показать пароль'} onClick={() => setShowPass((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400">{<EyeIcon open={showPass} />}</button>
               </div>
-            )}
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-bold text-slate-700" htmlFor="register-confirm">Повторите пароль</label>
+              <div className="relative">
+                <input id="register-confirm" type={showConfirm ? 'text' : 'password'} autoComplete="new-password" placeholder="Ещё раз" value={form.confirm} onChange={(e) => setForm((f) => ({ ...f, confirm: e.target.value }))} className={`${inputClass} pr-12`} />
+                <button type="button" aria-label={showConfirm ? 'Скрыть пароль' : 'Показать пароль'} onClick={() => setShowConfirm((v) => !v)} className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-slate-400">{<EyeIcon open={showConfirm} />}</button>
+              </div>
+            </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              className="mt-2 rounded-xl font-bold text-white text-base transition active:scale-95 disabled:opacity-60"
-              style={{
-                background: 'var(--color-primary)',
-                minHeight: 48,
-                padding: '0 24px',
-              }}
-            >
-              {loading ? 'Регистрация...' : 'Зарегистрироваться'}
+            {error && <div className="sm:col-span-2 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600" role="alert">{error}</div>}
+
+            <button type="submit" disabled={loading} className="sm:col-span-2 mt-1 min-h-13 rounded-2xl bg-[linear-gradient(135deg,#4f46e5,#4338ca)] px-6 py-3.5 text-base font-black text-white shadow-[0_10px_24px_rgba(79,70,229,.28)] transition hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-60">
+              {loading ? 'Создаём аккаунт…' : 'Продолжить: создать героя →'}
             </button>
           </form>
 
-          <p className="text-center text-gray-500 text-sm mt-6">
-            Уже есть аккаунт?{' '}
-            <Link to="/login" className="font-semibold" style={{ color: 'var(--color-primary)' }}>
-              Войти
-            </Link>
-          </p>
+          <p className="mt-5 text-center text-sm text-slate-500">Уже есть аккаунт? <Link to="/login" className="font-extrabold text-indigo-600">Войти</Link></p>
+          <p className="mt-4 border-t border-slate-100 pt-4 text-center text-xs leading-relaxed text-slate-400">Создавая аккаунт, вы подтверждаете, что являетесь родителем или законным представителем ребёнка.</p>
         </div>
-      </div>
-    </div>
+      </section>
+    </main>
   )
 }

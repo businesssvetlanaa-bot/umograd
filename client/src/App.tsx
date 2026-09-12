@@ -5,7 +5,7 @@ import LoginPage from './pages/LoginPage'
 import OnboardingPage from './pages/OnboardingPage'
 import ParentDashboard from './pages/ParentDashboard'
 import ChildWorld from './pages/ChildWorld'
-import HomeworkPage from './pages/HomeworkPage'
+import TutorPage from './pages/TutorPage'
 import SessionPage from './pages/SessionPage'
 import ParentChildPage from './pages/ParentChildPage'
 
@@ -43,8 +43,8 @@ export default function App() {
       <Route path="/child/:id/world" element={
         <RequireChild><ChildWorld /></RequireChild>
       } />
-      <Route path="/child/:id/homework" element={
-        <RequireChild><HomeworkPage /></RequireChild>
+      <Route path="/child/:id/tutor" element={
+        <RequireChild><TutorPage /></RequireChild>
       } />
       <Route path="/child/:id/session/:session_id" element={
         <RequireChild><SessionPage /></RequireChild>

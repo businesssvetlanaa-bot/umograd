@@ -1,7 +1,6 @@
 export interface BuildingItem {
   building_type: string
   name: string
-  grade: number
   emoji: string
   description: string
   cost: number
@@ -19,6 +18,7 @@ export interface BuildingItem {
 export interface ChildDashboard {
   id: string
   name: string
+  grade: number
   avatar_type: string
   avatar_color: string
   xp: number
@@ -26,6 +26,7 @@ export interface ChildDashboard {
   coins: number
   streak_days: number
   last_active: string | null
+  direct_answer_allowed: boolean
   subject_progress: Array<{
     subject: 'math' | 'russian' | 'english'
     mastery_level: number
@@ -40,22 +41,7 @@ export interface ChildDashboard {
   }>
 }
 
-const BASE = '/api'
-
-function authHeaders() {
-  const token = localStorage.getItem('token')
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }
-}
-
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(BASE + path, { headers: authHeaders(), ...options })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || 'Ошибка сервера')
-  return data
-}
+import { apiRequest as request } from './request'
 
 export const childrenApi = {
   create: (body: { name: string; grade: number; avatar_type: string; avatar_color: string; pin?: string }) =>
@@ -70,7 +56,7 @@ export const childrenApi = {
   dashboard: (id: string) =>
     request<ChildDashboard>(`/children/${id}/dashboard`),
 
-  update: (id: string, body: { name?: string; grade?: number; avatar_type?: string; avatar_color?: string }) =>
+  update: (id: string, body: { name?: string; grade?: number; avatar_type?: string; avatar_color?: string; direct_answer_allowed?: boolean }) =>
     request<{ id: string }>(`/children/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
 
   buildings: (id: string) =>

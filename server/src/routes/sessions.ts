@@ -32,6 +32,15 @@ function extractCompletion(text: string): {
   }
 }
 
+function getOpeningMessage(taskText: string, directAnswerAllowed = false): string {
+  const normalized = taskText.trim().toLowerCase()
+  if (normalized.startsWith('объясни мне тему')) return 'Я хочу разобраться в новой теме. Объясняй постепенно и проверяй, что я понял.'
+  if (normalized.startsWith('проведи тренировку')) return 'Я хочу потренироваться. Давай по одному заданию и помогай подсказками.'
+  return directAnswerAllowed
+    ? 'Мне нужна быстрая помощь. Покажи решение по шагам, объясни правило и итоговый ответ.'
+    : 'Помоги мне разобраться с заданием: объясняй спокойно, задавай вопросы и давай подсказки.'
+}
+
 // ─── POST /api/sessions/start ─────────────────────────────────────────────────
 router.post('/start', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const { child_id, image_base64, image_mime_type, task_text, task_hint, subject } = req.body as {
@@ -95,11 +104,12 @@ router.post('/start', authMiddleware, async (req: AuthRequest, res: Response): P
       topicTitle:  topic?.title ?? recognizedTopic ?? recognizedSubject,
       topicRules:  topic?.rules ?? '',
       taskText:    recognizedTask,
+      directAnswerAllowed: child.direct_answer_allowed,
     })
 
     // 5. Получаем первое сообщение репетитора
     const firstRaw = await chatWithTutor(systemPrompt, [
-      { role: 'user', content: 'Привет! Помоги мне с домашним заданием.' },
+      { role: 'user', content: getOpeningMessage(recognizedTask, child.direct_answer_allowed) },
     ])
 
     const { clean: firstMessage } = extractCompletion(firstRaw)
@@ -245,11 +255,12 @@ router.post('/:id/message', authMiddleware, async (req: AuthRequest, res: Respon
       topicTitle: session.topic?.title ?? String(session.subject),
       topicRules: session.topic?.rules ?? '',
       taskText:   session.task_text ?? '',
+      directAnswerAllowed: session.child.direct_answer_allowed,
     })
 
     // Собираем историю диалога
     const history: Array<{ role: 'user' | 'assistant'; content: string }> = [
-      { role: 'user', content: 'Привет! Помоги мне с домашним заданием.' },
+      { role: 'user', content: getOpeningMessage(session.task_text ?? '', session.child.direct_answer_allowed) },
       ...session.messages.map((m) => ({
         role:    m.role as 'user' | 'assistant',
         content: m.content,

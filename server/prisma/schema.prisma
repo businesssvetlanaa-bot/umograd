@@ -3,7 +3,7 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -34,10 +34,11 @@ model Child {
   parent_id    String
   parent       User      @relation(fields: [parent_id], references: [id], onDelete: Cascade)
   name         String
-  grade        Int       @default(3)
+  grade        Int       @default(4)
   avatar_type  String    @default("explorer") // explorer | witch | builder | ranger
   avatar_color String    @default("blue")     // blue | green | orange | purple
   pin          String?   // 4-digit PIN for child login
+  direct_answer_allowed Boolean @default(false)
   xp           Int       @default(0)
   level        Int       @default(1)
   streak_days  Int       @default(0)
@@ -64,7 +65,7 @@ model Session {
   subject     Subject
   topic_id    String?
   topic       Topic?    @relation(fields: [topic_id], references: [id])
-  task_text   String?   @db.Text
+  task_text   String?
   image_url   String?
   started_at  DateTime  @default(now())
   ended_at    DateTime?
@@ -100,7 +101,7 @@ model Message {
   session_id String
   session    Session     @relation(fields: [session_id], references: [id], onDelete: Cascade)
   role       MessageRole
-  content    String      @db.Text
+  content    String
   created_at DateTime    @default(now())
 
   @@map("messages")
@@ -211,10 +212,10 @@ model Topic {
   id          String   @id @default(cuid())
   subject     Subject
   title       String
-  description String   @db.Text
-  keywords    String[] // для поиска по заданию
-  rules       String   @db.Text // правило для системного промпта
-  grade       Int      @default(3)
+  description String
+  keywords    Json // для поиска по заданию
+  rules       String // правило для системного промпта
+  grade       Int      @default(4)
   order       Int      // порядок в программе
   created_at  DateTime @default(now())
 
@@ -234,7 +235,7 @@ model Curriculum {
   parent_id    String?  // null = системная программа ФГОС
   parent       User?    @relation(fields: [parent_id], references: [id], onDelete: Cascade)
   name         String
-  grade        Int      @default(3)
+  grade        Int      @default(4)
   subject      Subject
   is_system    Boolean  @default(false) // true = стандартная ФГОС
   topics       Json     @default("[]")  // [{id, title, description, order, enabled}]

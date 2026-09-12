@@ -1,7 +1,6 @@
 export interface User {
   id: string
   name: string
-  grade: number
   email: string
 }
 

@@ -1,19 +1,4 @@
-const BASE = '/api'
-
-function authHeaders() {
-  const token = localStorage.getItem('token')
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-  }
-}
-
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(BASE + path, { headers: authHeaders(), ...options })
-  const data = await res.json()
-  if (!res.ok) throw new Error(data.error || 'Ошибка сервера')
-  return data
-}
+import { apiRequest as request } from './request'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

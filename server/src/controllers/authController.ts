@@ -81,8 +81,8 @@ export async function login(req: Request, res: Response): Promise<void> {
 export async function childLogin(req: Request, res: Response): Promise<void> {
   const { child_id, pin } = req.body
 
-  if (!child_id || !pin) {
-    res.status(400).json({ error: 'Укажите профиль ребёнка и PIN' })
+  if (!child_id) {
+    res.status(400).json({ error: 'Выберите профиль ребёнка' })
     return
   }
 
@@ -93,7 +93,7 @@ export async function childLogin(req: Request, res: Response): Promise<void> {
       return
     }
 
-    if (child.pin && child.pin !== pin) {
+    if (child.pin && child.pin !== (pin ?? '')) {
       res.status(401).json({ error: 'Неверный PIN-код' })
       return
     }

@@ -27,7 +27,7 @@ app.use('/api/parent',    parentRouter)
 app.use('/api/curricula', curriculaRouter)
 
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', message: 'EduQuest API is running' })
+  res.json({ status: 'ok', message: 'Умоград API работает' })
 })
 
 // ── Статика клиента (production) ─────────────────────────────────────────────

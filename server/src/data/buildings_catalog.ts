@@ -52,7 +52,7 @@ export const BUILDINGS_CATALOG: BuildingDefinition[] = [
     type: 'house',
     name: 'Домик',
     emoji: '🏠',
-    description: 'Уютный домик — твоя стартовая постройка в мире EduQuest!',
+    description: 'Уютный домик — твоя стартовая постройка в мире Умограда!',
     cost: 0,
     required_level: 1,
     required_sessions: 0,

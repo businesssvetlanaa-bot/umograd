@@ -142,7 +142,7 @@ export default function ChildWorld() {
     }))
 
   function handlePortalClick(subject: string) {
-    navigate(`/child/${id}/homework`, { state: { subject } })
+    navigate(`/child/${id}/tutor`, { state: { subject } })
   }
 
   async function handlePlaceBuilding(x: number, y: number) {
@@ -293,11 +293,11 @@ export default function ChildWorld() {
             style={{ background: 'rgba(15, 23, 42, 0.8)' }}
           >
             <Link
-              to={`/child/${id}/homework`}
+              to={`/child/${id}/tutor`}
               className="flex-1 py-3 rounded-2xl font-bold text-white text-xs sm:text-sm text-center active:scale-95 transition-transform shadow-md"
               style={{ background: 'var(--color-primary)' }}
             >
-              📸 <span className="hidden sm:inline">Домашнее задание</span><span className="sm:hidden">ДЗ</span>
+              🎓 <span>Репетитор</span>
             </Link>
             <button
               onClick={() => setShowBuildPanel(true)}
