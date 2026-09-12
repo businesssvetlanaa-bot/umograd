@@ -78,6 +78,7 @@ async function seedSystemCurricula() {
     })
 
     const topicsJson = topics.map((t) => ({
+      id: `${subjectKey}-${t.order}`,
       order: t.order,
       title: t.title,
       description: t.description,

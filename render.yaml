@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: eduquest
+    name: umograd
     env: node
     region: frankfurt
     plan: free

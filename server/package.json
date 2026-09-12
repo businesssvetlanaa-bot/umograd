@@ -1,7 +1,7 @@
 {
-  "name": "eduquest-server",
+  "name": "umograd-server",
   "version": "1.0.0",
-  "description": "EduQuest API Server",
+  "description": "Umograd API Server",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",

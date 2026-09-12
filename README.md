@@ -54,7 +54,7 @@ cd client && npm run dev
 ## Структура проекта
 
 ```
-eduquest/
+umograd/
 ├── client/                 # React приложение
 │   └── src/
 │       ├── api/            # HTTP-клиент, запросы к API
