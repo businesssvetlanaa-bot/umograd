@@ -1,0 +1,85 @@
+import test from 'node:test'
+import assert from 'node:assert/strict'
+import topicsData from '../data/topics_fgos.json'
+import { buildTutorPrompt } from '../prompts/tutor'
+import { localTutorReply, type TutorMessage } from './localTutor'
+
+type Subject = 'math' | 'russian' | 'english'
+
+function prompt(subject: Subject, topicTitle: string, topicRules: string, directAnswerAllowed = false): string {
+  return buildTutorPrompt({
+    childName: 'QA-ребёнок',
+    grade: topicsData.grade,
+    subject,
+    topicTitle,
+    topicRules,
+    taskText: `Объясни мне тему «${topicTitle}»`,
+    directAnswerAllowed,
+  })
+}
+
+const opening: TutorMessage[] = [{ role: 'user', content: 'Я хочу разобраться в новой теме.' }]
+
+test('первые ответы по математике, русскому и английскому содержательны и различаются', () => {
+  const math = localTutorReply(prompt('math', 'Смысл умножения', 'Умножение — это сложение одинаковых слагаемых. 3 × 4 = 4 + 4 + 4 = 12.'), opening)
+  const russian = localTutorReply(prompt('russian', 'Корень', 'Корень — общая часть однокоренных слов. Лес, лесник, лесной — однокоренные слова.'), opening)
+  const english = localTutorReply(prompt('english', 'Greetings', 'Hello! — Привет! My name is... — Меня зовут...'), opening)
+
+  assert.match(math, /сложение одинаковых слагаемых/u)
+  assert.match(russian, /общая часть однокоренных слов/u)
+  assert.match(english, /Hello/u)
+  assert.match(english, /кнопку 🔊 English/u)
+  assert.equal(new Set([math, russian, english]).size, 3)
+})
+
+test('ответ «не знаю» уменьшает шаг и повторяет нужную часть правила', () => {
+  const reply = localTutorReply(
+    prompt('math', 'Порядок действий', 'Сначала выполняй действия в скобках. Затем умножение и деление.'),
+    [...opening, { role: 'assistant', content: 'Первый вопрос?' }, { role: 'user', content: 'Не понимаю' }],
+  )
+  assert.match(reply, /один маленький шаг/u)
+  assert.match(reply, /Сначала выполняй действия в скобках/u)
+  assert.match(reply, /\?/u)
+})
+
+test('три последовательных хода не повторяют один шаблон дословно', () => {
+  const systemPrompt = prompt('russian', 'Приставка', 'Приставка стоит перед корнем. Приставки пишутся слитно со словом.')
+  const replies = [2, 3, 4].map((turn) => {
+    const history: TutorMessage[] = []
+    for (let index = 0; index < turn; index += 1) {
+      history.push({ role: 'user', content: `Мой ответ ${index + 1}` })
+      if (index < turn - 1) history.push({ role: 'assistant', content: `Вопрос ${index + 1}` })
+    }
+    return localTutorReply(systemPrompt, history)
+  })
+  assert.equal(new Set(replies).size, 3)
+  replies.forEach((reply) => assert.doesNotMatch(reply, /ответ верный|правильно/iu))
+})
+
+test('быстрая помощь использует правило и даёт способ применения', () => {
+  const reply = localTutorReply(
+    prompt('math', 'Единицы длины', '1 метр = 100 сантиметров. Перед вычислением переведи величины в одинаковые единицы.', true),
+    opening,
+  )
+  assert.match(reply, /1 метр = 100 сантиметров/u)
+  assert.match(reply, /1\).*2\).*3\)/u)
+  assert.doesNotMatch(reply, /вычислю|готовый ответ/iu)
+})
+
+test('все 58 системных тем получают короткий предметный первый ответ', () => {
+  const subjects = ['math', 'russian', 'english'] as const
+  let checked = 0
+
+  for (const subject of subjects) {
+    for (const topic of topicsData.subjects[subject]) {
+      const reply = localTutorReply(prompt(subject, topic.title, topic.rules), opening)
+      assert.ok(reply.trim().length >= 40, `${subject}: ${topic.title}`)
+      assert.ok(reply.length <= 1000, `${subject}: ${topic.title} (${reply.length})`)
+      assert.match(reply, /\?/u, `${subject}: ${topic.title}`)
+      assert.doesNotMatch(reply, /Что ты уже знаешь или успел попробовать\?/u, `${subject}: ${topic.title}`)
+      checked += 1
+    }
+  }
+
+  assert.equal(checked, 58)
+})
