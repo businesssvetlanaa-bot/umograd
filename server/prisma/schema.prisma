@@ -50,6 +50,7 @@ model Child {
   sessions         Session[]
   subject_progress SubjectProgress[]
   buildings        Building[]
+  topic_settings   ChildTopicSetting[]
 
   @@map("children")
 }
@@ -242,5 +243,21 @@ model Curriculum {
   created_at   DateTime @default(now())
   updated_at   DateTime @updatedAt
 
+  topic_settings ChildTopicSetting[]
+
   @@map("curricula")
+}
+
+model ChildTopicSetting {
+  id            String     @id @default(cuid())
+  child_id      String
+  child         Child      @relation(fields: [child_id], references: [id], onDelete: Cascade)
+  curriculum_id String
+  curriculum    Curriculum @relation(fields: [curriculum_id], references: [id], onDelete: Cascade)
+  topic_key     String
+  enabled       Boolean    @default(true)
+  updated_at    DateTime   @updatedAt
+
+  @@unique([child_id, curriculum_id, topic_key])
+  @@map("child_topic_settings")
 }

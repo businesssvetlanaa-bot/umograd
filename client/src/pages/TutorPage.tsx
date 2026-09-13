@@ -1,6 +1,7 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { sessionsApi } from '../api/sessions'
+import { childrenApi, type LearningTopic } from '../api/children'
 import timMascot from '../assets/tim-mascot.png'
 
 type InputMode = 'subject' | 'activity' | 'choose' | 'preview' | 'text' | 'topic'
@@ -59,6 +60,46 @@ export default function TutorPage() {
   const [subject, setSubject]     = useState<Subject>(locationSubject ?? 'math')
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState('')
+  const [learningTopics, setLearningTopics] = useState<LearningTopic[]>([])
+  const [topicsLoading, setTopicsLoading] = useState(false)
+  const [topicsError, setTopicsError] = useState('')
+  const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (mode !== 'topic' || !id) return
+    let active = true
+
+    childrenApi.learningTopics(id, subject)
+      .then((topics) => {
+        if (!active) return
+        setLearningTopics(topics)
+        setTopicsLoading(false)
+      })
+      .catch((cause: unknown) => {
+        if (!active) return
+        setTopicsError(cause instanceof Error ? cause.message : 'Не удалось загрузить темы')
+        setTopicsLoading(false)
+      })
+
+    return () => { active = false }
+  }, [id, mode, subject])
+
+  function chooseSubject(nextSubject: Subject) {
+    setSubject(nextSubject)
+    setSelectedTopic(null)
+    setTaskText('')
+    setTopicsError('')
+  }
+
+  function openTopicMode(nextActivity: Exclude<Activity, 'homework'>) {
+    setActivity(nextActivity)
+    setTaskText('')
+    setSelectedTopic(null)
+    setLearningTopics([])
+    setTopicsLoading(true)
+    setTopicsError('')
+    setMode('topic')
+  }
 
   function handleFileSelect(file: File) {
     if (!file.type.startsWith('image/')) return
@@ -201,7 +242,7 @@ export default function TutorPage() {
             {(Object.keys(SUBJECT_LABELS) as Subject[]).map(s => (
               <button
                 key={s}
-                onClick={() => { setSubject(s); setMode('activity') }}
+                onClick={() => { chooseSubject(s); setMode('activity') }}
                 className="w-full p-5 rounded-2xl text-left font-bold text-white text-lg shadow-sm active:scale-95 transition-transform"
                 style={{ background: SUBJECT_COLORS[s] }}
               >
@@ -219,13 +260,13 @@ export default function TutorPage() {
             </div>
             <h2 className="text-lg font-bold text-gray-800">2. Что хочешь сделать?</h2>
             <button
-              onClick={() => { setActivity('learn'); setTaskText(''); setMode('topic') }}
+              onClick={() => openTopicMode('learn')}
               className="flex items-center gap-4 p-5 rounded-2xl bg-white shadow-sm text-left"
             >
               <span className="text-4xl">💡</span><div><div className="font-bold text-lg">Изучить тему</div><div className="text-sm text-gray-500">Объяснение с самого начала</div></div>
             </button>
             <button
-              onClick={() => { setActivity('practice'); setTaskText(''); setMode('topic') }}
+              onClick={() => openTopicMode('practice')}
               className="flex items-center gap-4 p-5 rounded-2xl bg-white shadow-sm text-left"
             >
               <span className="text-4xl">🎯</span><div><div className="font-bold text-lg">Потренироваться</div><div className="text-sm text-gray-500">Задания и подсказки по теме</div></div>
@@ -246,9 +287,37 @@ export default function TutorPage() {
               {SUBJECT_LABELS[subject]} · {activity === 'learn' ? 'Изучение темы' : 'Тренировка'}
             </div>
             <label className="font-bold text-gray-800">Какую тему будем разбирать?</label>
+            {topicsLoading ? (
+              <div className="py-4 text-center text-sm text-gray-500">Загружаю доступные темы…</div>
+            ) : topicsError ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{topicsError}</div>
+            ) : learningTopics.length > 0 ? (
+              <div className="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                {learningTopics.map((topic) => {
+                  const topicId = `${topic.curriculum_id}:${topic.topic_key}`
+                  const isSelected = selectedTopic === topicId
+                  return (
+                    <button
+                      type="button"
+                      key={topicId}
+                      onClick={() => { setSelectedTopic(topicId); setTaskText(topic.title) }}
+                      className={`rounded-2xl border-2 p-3 text-left transition ${isSelected ? 'border-[var(--color-primary)] bg-indigo-50' : 'border-gray-100 bg-white hover:border-indigo-200'}`}
+                    >
+                      <span className="block text-sm font-bold text-gray-800">{topic.title}</span>
+                      {topic.description && <span className="mt-1 block text-xs text-gray-500 line-clamp-2">{topic.description}</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800">
+                Родитель пока не оставил доступных тем. Попроси его включить нужную или напиши свою тему ниже.
+              </div>
+            )}
+            <label className="font-bold text-gray-800">Или напиши свою тему</label>
             <textarea
               value={taskText}
-              onChange={e => setTaskText(e.target.value)}
+              onChange={e => { setTaskText(e.target.value); setSelectedTopic(null) }}
               placeholder="Например: дроби, части речи, Present Simple..."
               rows={4}
               className="w-full p-4 rounded-2xl border-2 border-gray-200 focus:border-[var(--color-primary)] outline-none resize-none bg-white"
@@ -362,7 +431,7 @@ export default function TutorPage() {
               {(Object.keys(SUBJECT_LABELS) as Subject[]).map(s => (
                 <button
                   key={s}
-                  onClick={() => setSubject(s)}
+                  onClick={() => chooseSubject(s)}
                   className="flex-1 py-3 rounded-xl font-bold text-white text-sm transition-all active:scale-95"
                   style={{
                     background: subject === s ? SUBJECT_COLORS[s] : '#e5e7eb',

@@ -6,6 +6,50 @@ import { STARTER_BUILDINGS, BUILDINGS_CATALOG, getBuildingByType, BuildingDefini
 const router = Router()
 const prisma = new PrismaClient()
 
+type ChildOwner = { id: string; parent_id: string }
+type CurriculumTopicJson = {
+  id?: unknown
+  topic_key?: unknown
+  title?: unknown
+  description?: unknown
+  order?: unknown
+  enabled?: unknown
+}
+
+function canAccessChild(req: AuthRequest, child: ChildOwner): boolean {
+  const user = req.user
+  if (!user) return false
+  return user.role === 'child' ? user.id === child.id : user.id === child.parent_id
+}
+
+function parseCurriculumTopics(value: unknown): Array<{
+  topic_key: string
+  title: string
+  description: string
+  order: number
+  enabled: boolean
+}> {
+  if (!Array.isArray(value)) return []
+
+  return value.flatMap((item, index) => {
+    if (!item || typeof item !== 'object') return []
+    const topic = item as CurriculumTopicJson
+    const topicKey = typeof topic.topic_key === 'string'
+      ? topic.topic_key
+      : typeof topic.id === 'string' ? topic.id : ''
+    const title = typeof topic.title === 'string' ? topic.title.trim() : ''
+    if (!topicKey || !title) return []
+
+    return [{
+      topic_key: topicKey,
+      title,
+      description: typeof topic.description === 'string' ? topic.description : '',
+      order: typeof topic.order === 'number' ? topic.order : index + 1,
+      enabled: topic.enabled !== false,
+    }]
+  })
+}
+
 // ─────────────────────────────────────────
 // ПУБЛИЧНЫЙ — для детского входа
 // ─────────────────────────────────────────
@@ -174,6 +218,165 @@ router.get('/:id/dashboard', authMiddleware, async (req: AuthRequest, res: Respo
     res.status(500).json({ error: 'Ошибка сервера' })
   }
 })
+
+// GET /api/children/:id/curricula — программы с персональными настройками тем
+router.get('/:id/curricula', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  const childId = req.params['id'] as string
+
+  try {
+    const child = await prisma.child.findUnique({
+      where: { id: childId },
+      select: { id: true, parent_id: true, grade: true },
+    })
+    if (!child) { res.status(404).json({ error: 'Профиль не найден' }); return }
+    if (!canAccessChild(req, child)) { res.status(403).json({ error: 'Нет доступа' }); return }
+
+    const curricula = await prisma.curriculum.findMany({
+      where: {
+        grade: child.grade,
+        OR: [{ is_system: true }, { parent_id: child.parent_id }],
+      },
+      include: {
+        topic_settings: {
+          where: { child_id: childId },
+          select: { topic_key: true, enabled: true },
+        },
+      },
+      orderBy: [{ is_system: 'desc' }, { created_at: 'desc' }],
+    })
+
+    res.json(curricula.map((curriculum) => {
+      const settings = new Map(curriculum.topic_settings.map((setting) => [setting.topic_key, setting.enabled]))
+      return {
+        id: curriculum.id,
+        name: curriculum.name,
+        grade: curriculum.grade,
+        subject: curriculum.subject,
+        is_system: curriculum.is_system,
+        created_at: curriculum.created_at,
+        topics: parseCurriculumTopics(curriculum.topics).map((topic) => ({
+          ...topic,
+          enabled: settings.get(topic.topic_key) ?? topic.enabled,
+        })),
+      }
+    }))
+  } catch {
+    res.status(500).json({ error: 'Ошибка сервера' })
+  }
+})
+
+// GET /api/children/:id/topics?subject=math|russian|english
+router.get('/:id/topics', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
+  const childId = req.params['id'] as string
+  const subject = req.query['subject']
+  if (subject !== 'math' && subject !== 'russian' && subject !== 'english') {
+    res.status(400).json({ error: 'Неизвестный предмет' })
+    return
+  }
+
+  try {
+    const child = await prisma.child.findUnique({
+      where: { id: childId },
+      select: { id: true, parent_id: true, grade: true },
+    })
+    if (!child) { res.status(404).json({ error: 'Профиль не найден' }); return }
+    if (!canAccessChild(req, child)) { res.status(403).json({ error: 'Нет доступа' }); return }
+
+    const curricula = await prisma.curriculum.findMany({
+      where: {
+        grade: child.grade,
+        subject,
+        OR: [{ is_system: true }, { parent_id: child.parent_id }],
+      },
+      include: {
+        topic_settings: {
+          where: { child_id: childId },
+          select: { topic_key: true, enabled: true },
+        },
+      },
+      orderBy: [{ is_system: 'desc' }, { created_at: 'desc' }],
+    })
+
+    const seenTitles = new Set<string>()
+    const topics = curricula.flatMap((curriculum) => {
+      const settings = new Map(curriculum.topic_settings.map((setting) => [setting.topic_key, setting.enabled]))
+      return parseCurriculumTopics(curriculum.topics)
+        .filter((topic) => settings.get(topic.topic_key) ?? topic.enabled)
+        .sort((a, b) => a.order - b.order)
+        .flatMap((topic) => {
+          const normalizedTitle = topic.title.normalize('NFKC').trim().toLocaleLowerCase('ru-RU')
+          if (seenTitles.has(normalizedTitle)) return []
+          seenTitles.add(normalizedTitle)
+          return [{
+            curriculum_id: curriculum.id,
+            topic_key: topic.topic_key,
+            title: topic.title,
+            description: topic.description,
+            order: topic.order,
+          }]
+        })
+    })
+
+    res.json(topics)
+  } catch {
+    res.status(500).json({ error: 'Ошибка сервера' })
+  }
+})
+
+// PUT /api/children/:id/curricula/:curriculumId/topics/:topicKey
+router.put(
+  '/:id/curricula/:curriculumId/topics/:topicKey',
+  authMiddleware, requireParent,
+  async (req: AuthRequest, res: Response): Promise<void> => {
+    const childId = req.params['id'] as string
+    const curriculumId = req.params['curriculumId'] as string
+    const topicKey = req.params['topicKey'] as string
+    const { enabled } = req.body as { enabled?: unknown }
+
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({ error: 'Укажите enabled' })
+      return
+    }
+
+    try {
+      const child = await prisma.child.findUnique({
+        where: { id: childId },
+        select: { id: true, parent_id: true, grade: true },
+      })
+      if (!child) { res.status(404).json({ error: 'Профиль не найден' }); return }
+      if (child.parent_id !== req.user!.id) { res.status(403).json({ error: 'Нет доступа' }); return }
+
+      const curriculum = await prisma.curriculum.findFirst({
+        where: {
+          id: curriculumId,
+          grade: child.grade,
+          OR: [{ is_system: true }, { parent_id: req.user!.id }],
+        },
+      })
+      if (!curriculum) { res.status(404).json({ error: 'Программа не найдена' }); return }
+
+      const topicExists = parseCurriculumTopics(curriculum.topics)
+        .some((topic) => topic.topic_key === topicKey)
+      if (!topicExists) { res.status(404).json({ error: 'Тема не найдена' }); return }
+
+      await prisma.childTopicSetting.upsert({
+        where: {
+          child_id_curriculum_id_topic_key: {
+            child_id: childId,
+            curriculum_id: curriculumId,
+            topic_key: topicKey,
+          },
+        },
+        create: { child_id: childId, curriculum_id: curriculumId, topic_key: topicKey, enabled },
+        update: { enabled },
+      })
+
+      res.json({ ok: true })
+    } catch {
+      res.status(500).json({ error: 'Ошибка сервера' })
+    }
+  },
+)
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 

@@ -41,6 +41,30 @@ export interface ChildDashboard {
   }>
 }
 
+export interface LearningTopic {
+  curriculum_id: string
+  topic_key: string
+  title: string
+  description: string
+  order: number
+}
+
+export interface ChildCurriculum {
+  id: string
+  name: string
+  grade: number
+  subject: 'math' | 'russian' | 'english'
+  is_system: boolean
+  created_at: string
+  topics: Array<{
+    topic_key: string
+    title: string
+    description: string
+    order: number
+    enabled: boolean
+  }>
+}
+
 import { apiRequest as request } from './request'
 
 export const childrenApi = {
@@ -64,4 +88,16 @@ export const childrenApi = {
 
   placeBuilding: (id: string, body: { building_type: string; position_x: number; position_y: number }) =>
     request<{ id: string }>(`/children/${id}/buildings`, { method: 'POST', body: JSON.stringify(body) }),
+
+  curricula: (id: string) =>
+    request<ChildCurriculum[]>(`/children/${id}/curricula`),
+
+  learningTopics: (id: string, subject: 'math' | 'russian' | 'english') =>
+    request<LearningTopic[]>(`/children/${id}/topics?subject=${subject}`),
+
+  setTopicEnabled: (childId: string, curriculumId: string, topicKey: string, enabled: boolean) =>
+    request<{ ok: boolean }>(`/children/${childId}/curricula/${curriculumId}/topics/${encodeURIComponent(topicKey)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    }),
 }

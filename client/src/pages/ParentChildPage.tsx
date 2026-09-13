@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { childrenApi, type ChildDashboard } from '../api/children'
+import { childrenApi, type ChildCurriculum, type ChildDashboard } from '../api/children'
 import {
   parentApi,
   type SessionSummary, type SessionDetail, type SessionMessage,
-  type ProgressData, type WeakSpot, type CurriculumItem,
+  type ProgressData, type WeakSpot,
 } from '../api/parent'
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -342,8 +342,8 @@ type UploadState = {
   text: string; loading: boolean; error: string
 }
 
-function CurriculumTab() {
-  const [curricula, setCurricula] = useState<CurriculumItem[]>([])
+function CurriculumTab({ childId }: { childId: string }) {
+  const [curricula, setCurricula] = useState<ChildCurriculum[]>([])
   const [loading, setLoading]     = useState(true)
   const [error, setError]         = useState('')
   const [selected, setSelected]   = useState<string | null>(null)
@@ -351,18 +351,20 @@ function CurriculumTab() {
     open: false, name: '', grade: 3, subject: 'math', text: '', loading: false, error: '',
   })
   const [toggling, setToggling]   = useState<string | null>(null)
+  const [toggleError, setToggleError] = useState('')
 
-  const loadCurricula = useCallback(() => {
-    parentApi.getCurricula()
+  const loadCurricula = useCallback((preferredId?: string) => {
+    return childrenApi.curricula(childId)
       .then((d) => {
         setCurricula(d)
-        if (d.length > 0 && !selected) setSelected(d[0].id)
+        setSelected((current) => preferredId ?? (current && d.some((item) => item.id === current) ? current : d[0]?.id ?? null))
+        setError('')
         setLoading(false)
       })
       .catch((e: Error) => { setError(e.message); setLoading(false) })
-  }, [selected])
+  }, [childId])
 
-  useEffect(() => { loadCurricula() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void loadCurricula() }, [loadCurricula])
 
   async function handleUpload() {
     if (!upload.name.trim() || !upload.text.trim()) {
@@ -374,26 +376,29 @@ function CurriculumTab() {
       const newC = await parentApi.createCurriculum({
         name: upload.name, grade: upload.grade, subject: upload.subject, text_content: upload.text,
       })
-      setCurricula((prev) => [newC, ...prev])
-      setSelected(newC.id)
+      await loadCurricula(newC.id)
       setUpload({ open: false, name: '', grade: 3, subject: 'math', text: '', loading: false, error: '' })
     } catch (e: unknown) {
       setUpload((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : 'Ошибка' }))
     }
   }
 
-  async function handleToggle(curriculumId: string, topicId: string, enabled: boolean) {
-    setToggling(topicId)
+  async function handleToggle(curriculumId: string, topicKey: string, enabled: boolean) {
+    const toggleId = `${curriculumId}:${topicKey}`
+    setToggling(toggleId)
+    setToggleError('')
     try {
-      await parentApi.toggleTopic(curriculumId, topicId, enabled)
+      await childrenApi.setTopicEnabled(childId, curriculumId, topicKey, enabled)
       setCurricula((prev) =>
         prev.map((c) =>
           c.id === curriculumId
-            ? { ...c, topics: c.topics.map((t) => t.id === topicId ? { ...t, enabled } : t) }
+            ? { ...c, topics: c.topics.map((t) => t.topic_key === topicKey ? { ...t, enabled } : t) }
             : c,
         ),
       )
-    } catch { /* ignore */ }
+    } catch (cause: unknown) {
+      setToggleError(cause instanceof Error ? cause.message : 'Не удалось изменить доступность темы')
+    }
     finally { setToggling(null) }
   }
 
@@ -430,6 +435,8 @@ function CurriculumTab() {
         </button>
       </div>
 
+      {toggleError && <div className="mb-4 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{toggleError}</div>}
+
       {/* Topics list */}
       {currentCurriculum ? (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
@@ -439,14 +446,20 @@ function CurriculumTab() {
           </div>
           <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto">
             {currentCurriculum.topics.map((topic) => (
-              <div key={topic.id} className="flex items-start gap-3 px-4 py-3">
+              <div key={topic.topic_key} className="flex items-start gap-3 px-4 py-3">
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-gray-800">{topic.title}</p>
                   {topic.description && (
                     <p className="text-xs text-gray-400 mt-0.5 line-clamp-2">{topic.description}</p>
                   )}
                 </div>
-                <label className="flex items-center gap-2 flex-shrink-0 cursor-pointer mt-0.5">
+                <button
+                  type="button"
+                  disabled={toggling !== null}
+                  onClick={() => handleToggle(currentCurriculum.id, topic.topic_key, topic.enabled === false)}
+                  className="flex flex-shrink-0 cursor-pointer items-center gap-2 mt-0.5 disabled:cursor-wait"
+                  aria-label={`${topic.enabled !== false ? 'Отключить' : 'Включить'} тему ${topic.title}`}
+                >
                   <div
                     className="relative w-10 h-5 rounded-full transition-colors"
                     style={{
@@ -454,21 +467,16 @@ function CurriculumTab() {
                         ? 'var(--color-primary)'
                         : '#E5E7EB',
                     }}
-                    onClick={() => {
-                      if (!currentCurriculum.is_system) {
-                        handleToggle(currentCurriculum.id, topic.id, topic.enabled === false)
-                      }
-                    }}
                   >
                     <div
                       className="absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all"
                       style={{
                         left: topic.enabled !== false ? 22 : 2,
-                        opacity: toggling === topic.id ? 0.6 : 1,
+                        opacity: toggling === `${currentCurriculum.id}:${topic.topic_key}` ? 0.6 : 1,
                       }}
                     />
                   </div>
-                </label>
+                </button>
               </div>
             ))}
           </div>
@@ -742,7 +750,7 @@ export default function ParentChildPage() {
         {id && activeTab === 'progress'   && <ProgressTab childId={id} />}
         {id && activeTab === 'sessions'   && <SessionsTab childId={id} />}
         {id && activeTab === 'weak'       && <WeakSpotsTab childId={id} />}
-        {activeTab === 'curriculum'       && <CurriculumTab />}
+        {id && activeTab === 'curriculum' && <CurriculumTab childId={id} />}
       </main>
     </div>
   )
