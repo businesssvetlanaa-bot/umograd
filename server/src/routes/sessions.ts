@@ -78,6 +78,13 @@ router.post('/start', authMiddleware, async (req: AuthRequest, res: Response): P
       if (task_hint?.trim()) recognizedTask += `\nЗадание для разбора: ${task_hint.trim()}`
     }
 
+    if (!recognizedTopic) {
+      const manualTopic = recognizedTask.match(
+        /^(?:Объясни мне тему|Проведи тренировку по теме)\s+«([^»]+)»/i,
+      )
+      recognizedTopic = manualTopic?.[1]?.trim() ?? ''
+    }
+
     if (!recognizedTask) {
       res.status(400).json({ error: 'Укажите текст задания или загрузите фото' })
       return

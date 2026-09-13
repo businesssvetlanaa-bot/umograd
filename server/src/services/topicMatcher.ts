@@ -20,8 +20,9 @@ export async function findTopic(subject: string, taskText: string) {
   if (topics.length === 0) return null
 
   const haystack = taskText.toLowerCase()
-  let bestTopic = topics[0]
-  let bestScore = -1
+  const tokens = new Set(haystack.split(/[^\p{L}\p{N}]+/u).filter(Boolean))
+  let bestTopic: (typeof topics)[number] | null = null
+  let bestScore = 0
 
   for (const topic of topics) {
     let score = 0
@@ -29,7 +30,10 @@ export async function findTopic(subject: string, taskText: string) {
       ? topic.keywords.filter((value): value is string => typeof value === 'string')
       : []
     for (const kw of keywords) {
-      if (haystack.includes(kw.toLowerCase())) score++
+      const keyword = kw.trim().toLowerCase()
+      if (!keyword) continue
+      const matches = keyword.length <= 2 ? tokens.has(keyword) : haystack.includes(keyword)
+      if (matches) score++
     }
     // также проверяем совпадение с названием темы
     if (haystack.includes(topic.title.toLowerCase())) score += 2
