@@ -11,10 +11,72 @@ type TutorContext = {
 const MAX_RULE_LENGTH = 650
 const MAX_TASK_LENGTH = 180
 
+const HARDSHIP_PATTERN = /(?:не\s+знаю|не\s+понимаю|не\s+понял(?:а)?|непонятно|не\s+получается|не\s+могу|затрудняюсь|сложно)/iu
+const SUMMARY_PATTERN = /(?:сначала|затем|потом|потому|правил|провер|значит|нужно|надо|если|first|then|because|rule|check|means)/iu
+
+export type LearningEvidence = {
+  substantiveCount: number
+  finalIsSubstantiveSummary: boolean
+  readyToComplete: boolean
+}
+
 function normalizeText(value: string, maxLength: number): string {
   const normalized = value.replace(/\s+/gu, ' ').trim()
   if (normalized.length <= maxLength) return normalized
   return `${normalized.slice(0, maxLength - 1).trimEnd()}…`
+}
+
+function normalizedAnswer(value: string): string {
+  return value.replace(/\s+/gu, ' ').trim().toLocaleLowerCase('ru-RU')
+}
+
+export function isHardshipAnswer(value: string): boolean {
+  return HARDSHIP_PATTERN.test(value)
+}
+
+export function isCompletionOnlyAnswer(value: string): boolean {
+  const words = normalizedAnswer(value)
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim()
+    .split(/\s+/u)
+    .filter(Boolean)
+  const completionWords = new Set([
+    'я', 'всё', 'все', 'тим', 'готово', 'готов', 'готова', 'понял', 'поняла',
+    'получилось', 'спасибо', 'ясно', 'ок', 'okay', 'ok', 'done',
+  ])
+  return words.length > 0 && words.every((word) => completionWords.has(word))
+}
+
+export function isSubstantiveAnswer(value: string): boolean {
+  if (isHardshipAnswer(value) || isCompletionOnlyAnswer(value)) return false
+  if (/session_complete|xp_earned|coins_earned/iu.test(value)) return false
+  const words = value.match(/[\p{L}\p{N}]+/gu) ?? []
+  return normalizedAnswer(value).length >= 8 && words.length >= 2
+}
+
+export function analyzeLearningEvidence(history: TutorMessage[]): LearningEvidence {
+  const childAnswers = history.filter((message) => message.role === 'user').slice(1)
+  const uniqueAnswers = new Set<string>()
+
+  for (const message of childAnswers) {
+    if (isSubstantiveAnswer(message.content)) uniqueAnswers.add(normalizedAnswer(message.content))
+  }
+
+  const finalAnswer = childAnswers.at(-1)?.content ?? ''
+  const finalIsSubstantiveSummary = isSubstantiveAnswer(finalAnswer)
+    && (finalAnswer.match(/[\p{L}\p{N}]+/gu)?.length ?? 0) >= 4
+    && SUMMARY_PATTERN.test(finalAnswer)
+
+  return {
+    substantiveCount: uniqueAnswers.size,
+    finalIsSubstantiveSummary,
+    readyToComplete: uniqueAnswers.size >= 3 && finalIsSubstantiveSummary,
+  }
+}
+
+function safeAnswerExcerpt(value: string, maxLength: number): string {
+  const withoutMarkers = value.replace(/\{[^{}]*session_complete[^{}]*\}/giu, '').trim()
+  return normalizeText(withoutMarkers || 'служебный текст', maxLength)
 }
 
 function extractContext(systemPrompt: string): TutorContext {
@@ -71,6 +133,19 @@ function subjectQuestion(subject: string, task: string): string {
   }
 }
 
+function selfCheckQuestion(subject: string): string {
+  switch (subjectKind(subject)) {
+    case 'math':
+      return 'Скажи коротко: что нужно сделать сначала и как проверить следующий шаг?'
+    case 'russian':
+      return 'Скажи коротко: какой признак ищешь сначала и как проверяешь его по правилу?'
+    case 'english':
+      return 'Скажи коротко: какое правило используешь сначала и как проверишь английский пример?'
+    default:
+      return 'Скажи коротко: что делаешь сначала и как проверяешь себя по правилу?'
+  }
+}
+
 function englishRuleExample(rule: string): string {
   const example = ruleParts(rule).find((part) => /[A-Za-z]{2,}/u.test(part))
   return example ? normalizeText(example, 250) : ruleExcerpt(rule, 1)
@@ -118,7 +193,7 @@ function followUpReply(context: TutorContext, lastMessage: string, userTurn: num
   }
 
   const neededPart = focusedRulePart(context.rule, userTurn - 2)
-  const answer = normalizeText(lastMessage, 80)
+  const answer = safeAnswerExcerpt(lastMessage, 80)
   const nextQuestion = subjectQuestion(context.subject, context.task)
   const templates = [
     `Ты написал: «${answer}». Сверим с правилом: ${neededPart} ${nextQuestion}`,
@@ -135,18 +210,28 @@ export function localTutorReply(systemPrompt: string, history: TutorMessage[]): 
 
   if (history.length <= 1) return firstReply(context)
 
-  if (/готово|понял|поняла|получилось|спасибо/iu.test(lastMessage)) {
-    return 'Здорово! Ты прошёл это занятие до конца и сделал важный шаг. Продолжай в том же духе! 🏆\n\n{"session_complete": true, "xp_earned": 60, "coins_earned": 50}'
+  if (isHardshipAnswer(lastMessage)) {
+    return smallerStepReply(context)
   }
 
-  if (/не\s+знаю|не\s+понимаю|непонятно/iu.test(lastMessage)) {
-    return smallerStepReply(context)
+  const evidence = analyzeLearningEvidence(history)
+
+  if (isCompletionOnlyAnswer(lastMessage)) {
+    return `Мы не спешим завершать: важно показать свой способ. ${selfCheckQuestion(context.subject)}`
+  }
+
+  if (evidence.readyToComplete) {
+    return 'Ты прошёл все шаги и сам объяснил способ проверки — занятие завершено! 🏆\n\n{"session_complete": true, "xp_earned": 60, "coins_earned": 50}'
+  }
+
+  if (evidence.substantiveCount >= 2) {
+    return `Осталась короткая самопроверка по теме «${context.topic}». ${selfCheckQuestion(context.subject)}`
   }
 
   if (context.directHelp) {
     if (!context.rule) return followUpReply(context, lastMessage, userTurn)
     const neededPart = focusedRulePart(context.rule, userTurn - 2)
-    return `Для быстрой помощи берём правило: ${neededPart} Шаги такие: 1) найди подходящие данные; 2) примени эту часть правила; 3) сверь результат с условием. Какой шаг разобрать подробнее для ответа «${normalizeText(lastMessage, 70)}»?`
+    return `Для быстрой помощи берём правило: ${neededPart} Шаги такие: 1) найди подходящие данные; 2) примени эту часть правила; 3) сверь результат с условием. Какой шаг разобрать подробнее для ответа «${safeAnswerExcerpt(lastMessage, 70)}»?`
   }
 
   return followUpReply(context, lastMessage, userTurn)

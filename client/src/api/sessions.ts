@@ -45,6 +45,7 @@ export const sessionsApi = {
     request<{
       message: string
       session_complete: boolean
+      reward_granted?: boolean
       xp_earned?: number
       coins_earned?: number
       user_content: string

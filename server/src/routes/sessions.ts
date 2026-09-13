@@ -4,9 +4,11 @@ import { authMiddleware, AuthRequest } from '../middleware/authMiddleware'
 import { recognizeHomework, recognizeAnswer, chatWithTutor } from '../services/claude'
 import { findTopic } from '../services/topicMatcher'
 import { buildTutorPrompt } from '../prompts/tutor'
+import { analyzeLearningEvidence, localTutorReply, type TutorMessage } from '../services/localTutor'
 
 const router = Router()
 const prisma = new PrismaClient()
+export const SESSION_REWARD = { xp: 60, coins: 50 } as const
 
 function canAccessChild(req: AuthRequest, childId: string, parentId: string): boolean {
   const user = req.user
@@ -15,26 +17,68 @@ function canAccessChild(req: AuthRequest, childId: string, parentId: string): bo
 }
 
 // Извлекаем JSON session_complete из текста репетитора
-function extractCompletion(text: string): {
+export function extractCompletion(text: string): {
   clean: string
   complete: boolean
-  xp: number
-  coins: number
 } {
   const match = text.match(/\{"session_complete"\s*:\s*true[^}]*\}/)
-  if (!match) return { clean: text, complete: false, xp: 0, coins: 0 }
+  if (!match) return { clean: text, complete: false }
 
   try {
-    const json = JSON.parse(match[0]) as { session_complete: boolean; xp_earned?: number; coins_earned?: number }
+    const json = JSON.parse(match[0]) as { session_complete?: boolean }
     const clean = text.replace(match[0], '').trim()
-    return {
-      clean,
-      complete: true,
-      xp:    json.xp_earned    ?? 60,
-      coins: json.coins_earned ?? 50,
-    }
+    return { clean, complete: json.session_complete === true }
   } catch {
-    return { clean: text, complete: false, xp: 0, coins: 0 }
+    return { clean: text, complete: false }
+  }
+}
+
+export function resolveTutorCompletion(
+  systemPrompt: string,
+  history: TutorMessage[],
+  rawReply: string,
+): { replyText: string; complete: boolean } {
+  const parsed = extractCompletion(rawReply)
+  if (!parsed.complete) return { replyText: parsed.clean, complete: false }
+
+  const evidence = analyzeLearningEvidence(history)
+  if (!evidence.readyToComplete) {
+    return { replyText: localTutorReply(systemPrompt, history), complete: false }
+  }
+
+  return { replyText: parsed.clean, complete: true }
+}
+
+type CompletionTransactionResult = {
+  completed: boolean
+  rewardGranted: boolean
+  xp: number
+  coins: number
+}
+
+export function buildCompletionResponse(
+  replyText: string,
+  userContent: string,
+  completion: CompletionTransactionResult,
+) {
+  if (!completion.rewardGranted) {
+    return {
+      message: completion.completed
+        ? 'Занятие уже завершено в другом окне. Награда была начислена один раз.'
+        : replyText,
+      session_complete: false,
+      reward_granted: false,
+      user_content: userContent,
+    }
+  }
+
+  return {
+    message: replyText,
+    session_complete: true,
+    reward_granted: true,
+    xp_earned: completion.xp,
+    coins_earned: completion.coins,
+    user_content: userContent,
   }
 }
 
@@ -313,7 +357,7 @@ router.post('/:id/message', authMiddleware, async (req: AuthRequest, res: Respon
 
     // Получаем ответ репетитора
     const raw = await chatWithTutor(systemPrompt, history)
-    const { clean: replyText, complete, xp, coins } = extractCompletion(raw)
+    const { replyText, complete } = resolveTutorCompletion(systemPrompt, history, raw)
 
     // Сохраняем ответ репетитора
     await prisma.message.create({
@@ -321,75 +365,114 @@ router.post('/:id/message', authMiddleware, async (req: AuthRequest, res: Respon
     })
 
     if (complete) {
-      // Завершаем сессию
-      await prisma.session.update({
-        where: { id: sessionId },
-        data: { completed: true, ended_at: new Date(), xp_earned: xp, coins_earned: coins },
-      })
+      const completion = await prisma.$transaction(async (tx) => {
+        const persistedMessages = await tx.message.findMany({
+          where: { session_id: sessionId },
+          orderBy: { created_at: 'asc' },
+          select: { role: true, content: true },
+        })
+        const persistedHistory: TutorMessage[] = [
+          { role: 'user', content: getOpeningMessage(session.task_text ?? '', session.child.direct_answer_allowed) },
+          ...persistedMessages.map((message) => ({
+            role: message.role as 'user' | 'assistant',
+            content: message.content,
+          })),
+        ]
 
-      // Начисляем XP и монеты ребёнку
-      const child = await prisma.child.update({
-        where: { id: session.child_id },
-        data: {
-          xp:    { increment: xp },
-          coins: { increment: coins },
-        },
-      })
+        if (!analyzeLearningEvidence(persistedHistory).readyToComplete) {
+          return { completed: false, rewardGranted: false, xp: 0, coins: 0 }
+        }
 
-      // Пересчитываем уровень (каждые 100 XP = новый уровень)
-      const newLevel = Math.floor(child.xp / 100) + 1
-      if (newLevel > child.level) {
-        await prisma.child.update({ where: { id: child.id }, data: { level: newLevel } })
-      }
-
-      // Обновляем прогресс по предмету
-      const existing = await prisma.subjectProgress.findUnique({
-        where: { child_id_subject: { child_id: session.child_id, subject: session.subject } },
-      })
-
-      let spId: string
-      if (existing) {
-        const updated = await prisma.subjectProgress.update({
-          where: { id: existing.id },
+        const claimed = await tx.session.updateMany({
+          where: { id: sessionId, completed: false },
           data: {
-            sessions_count: { increment: 1 },
-            mastery_level:  Math.min(100, existing.mastery_level + 5),
+            completed: true,
+            ended_at: new Date(),
+            xp_earned: SESSION_REWARD.xp,
+            coins_earned: SESSION_REWARD.coins,
           },
         })
-        spId = updated.id
-      } else {
-        const created = await prisma.subjectProgress.create({
+
+        if (claimed.count !== 1) {
+          const stored = await tx.session.findUnique({
+            where: { id: sessionId },
+            select: { completed: true },
+          })
+          return {
+            completed: stored?.completed ?? false,
+            rewardGranted: false,
+            xp: 0,
+            coins: 0,
+          }
+        }
+
+        const child = await tx.child.update({
+          where: { id: session.child_id },
           data: {
-            child_id:       session.child_id,
-            subject:        session.subject,
-            mastery_level:  5,
-            sessions_count: 1,
+            xp:    { increment: SESSION_REWARD.xp },
+            coins: { increment: SESSION_REWARD.coins },
           },
         })
-        spId = created.id
-      }
 
-      // Обновляем прогресс по теме (если сессия привязана к теме)
-      if (session.topic_id) {
-        const existingTp = await prisma.topicProgress.findUnique({
-          where: { subject_progress_id_topic_id: { subject_progress_id: spId, topic_id: session.topic_id } },
+        const newLevel = Math.floor(child.xp / 100) + 1
+        if (newLevel > child.level) {
+          await tx.child.update({ where: { id: child.id }, data: { level: newLevel } })
+        }
+
+        const existing = await tx.subjectProgress.findUnique({
+          where: { child_id_subject: { child_id: session.child_id, subject: session.subject } },
         })
-        if (existingTp) {
-          await prisma.topicProgress.update({
-            where: { id: existingTp.id },
+
+        let spId: string
+        if (existing) {
+          const updated = await tx.subjectProgress.update({
+            where: { id: existing.id },
             data: {
-              mastery_level:  Math.min(100, existingTp.mastery_level + 10),
               sessions_count: { increment: 1 },
+              mastery_level:  Math.min(100, existing.mastery_level + 5),
             },
           })
+          spId = updated.id
         } else {
-          await prisma.topicProgress.create({
-            data: { subject_progress_id: spId, topic_id: session.topic_id, mastery_level: 10, sessions_count: 1 },
+          const created = await tx.subjectProgress.create({
+            data: {
+              child_id:       session.child_id,
+              subject:        session.subject,
+              mastery_level:  5,
+              sessions_count: 1,
+            },
           })
+          spId = created.id
         }
-      }
 
-      res.json({ message: replyText, session_complete: true, xp_earned: xp, coins_earned: coins, user_content: savedUserContent })
+        if (session.topic_id) {
+          const existingTp = await tx.topicProgress.findUnique({
+            where: { subject_progress_id_topic_id: { subject_progress_id: spId, topic_id: session.topic_id } },
+          })
+          if (existingTp) {
+            await tx.topicProgress.update({
+              where: { id: existingTp.id },
+              data: {
+                mastery_level:  Math.min(100, existingTp.mastery_level + 10),
+                sessions_count: { increment: 1 },
+              },
+            })
+          } else {
+            await tx.topicProgress.create({
+              data: { subject_progress_id: spId, topic_id: session.topic_id, mastery_level: 10, sessions_count: 1 },
+            })
+          }
+        }
+
+        return {
+          completed: true,
+          rewardGranted: true,
+          xp: SESSION_REWARD.xp,
+          coins: SESSION_REWARD.coins,
+        }
+      })
+
+      res.json(buildCompletionResponse(replyText, savedUserContent, completion))
     } else {
       res.json({ message: replyText, session_complete: false, user_content: savedUserContent })
     }

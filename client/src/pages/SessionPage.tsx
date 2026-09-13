@@ -393,7 +393,7 @@ export default function SessionPage() {
       }
       setMessages(prev => [...prev, assistantMsg])
 
-      if (res.session_complete) {
+      if (res.session_complete && res.reward_granted === true) {
         setXpEarned(res.xp_earned ?? 0)
         setCoinsEarned(res.coins_earned ?? 0)
         setTimeout(() => setComplete(true), 1800)
