@@ -269,6 +269,11 @@ router.post('/:id/buildings', authMiddleware, async (req: AuthRequest, res: Resp
     })
     if (!child) { res.status(404).json({ error: 'Профиль не найден' }); return }
 
+    if (req.user!.role === 'parent' && child.parent_id !== req.user!.id) {
+      res.status(403).json({ error: 'Нет доступа' })
+      return
+    }
+
     const existing = child.buildings.find((b) => b.building_type === building_type)
 
     if (existing) {

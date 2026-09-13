@@ -147,7 +147,6 @@ export default function ChildWorld() {
 
   async function handlePlaceBuilding(x: number, y: number) {
     if (!placingBuilding || !id) return
-    const emoji = placingEmoji
     setPlacingBuilding(null)
     setPlacingEmoji('')
     try {

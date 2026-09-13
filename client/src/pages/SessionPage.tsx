@@ -41,7 +41,7 @@ function prepareSpeechText(text: string): string {
   return text
     // Эмодзи остаются видимыми в чате, но синтезатор не произносит их названия.
     .replace(/[\p{Extended_Pictographic}\p{Emoji_Presentation}]/gu, ' ')
-    .replace(/[\u200D\uFE0E\uFE0F\u20E3]/g, '')
+    .replace(/\u200D|\uFE0E|\uFE0F|\u20E3/gu, '')
     .replace(/[*_#`]/g, '')
     .replace(/\s+/g, ' ')
     .trim()

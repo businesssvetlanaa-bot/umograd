@@ -13,12 +13,14 @@ interface AuthState {
 // Читаем localStorage при каждом вызове хука — не при загрузке модуля.
 // Это важно: каждый компонент получает актуальное состояние после логина.
 function readStorage(): AuthState {
+  const token = localStorage.getItem('token')
+
   return {
-    token: localStorage.getItem('token'),
-    role: localStorage.getItem('role') as 'parent' | 'child' | null,
+    token,
+    role: token ? (localStorage.getItem('role') as 'parent' | 'child' | null) : null,
     user: null,
     child: null,
-    loading: true,
+    loading: Boolean(token),
   }
 }
 
@@ -28,7 +30,6 @@ export function useAuth() {
   useEffect(() => {
     const token = localStorage.getItem('token')
     if (!token) {
-      setState((s) => ({ ...s, loading: false }))
       return
     }
     authApi

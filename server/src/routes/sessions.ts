@@ -8,6 +8,12 @@ import { buildTutorPrompt } from '../prompts/tutor'
 const router = Router()
 const prisma = new PrismaClient()
 
+function canAccessChild(req: AuthRequest, childId: string, parentId: string): boolean {
+  const user = req.user
+  if (!user) return false
+  return user.role === 'child' ? user.id === childId : user.id === parentId
+}
+
 // Извлекаем JSON session_complete из текста репетитора
 function extractCompletion(text: string): {
   clean: string
@@ -61,6 +67,11 @@ router.post('/start', authMiddleware, async (req: AuthRequest, res: Response): P
     const child = await prisma.child.findUnique({ where: { id: child_id } })
     if (!child) {
       res.status(404).json({ error: 'Профиль ребёнка не найден' })
+      return
+    }
+
+    if (!canAccessChild(req, child.id, child.parent_id)) {
+      res.status(403).json({ error: 'Нет доступа' })
       return
     }
 
@@ -154,7 +165,7 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response): Prom
       include: {
         messages: { orderBy: { created_at: 'asc' } },
         topic:    true,
-        child:    { select: { name: true } },
+        child:    { select: { name: true, parent_id: true } },
       },
     })
 
@@ -163,7 +174,12 @@ router.get('/:id', authMiddleware, async (req: AuthRequest, res: Response): Prom
       return
     }
 
-    res.json(session)
+    if (!canAccessChild(req, session.child_id, session.child.parent_id)) {
+      res.status(403).json({ error: 'Нет доступа' })
+      return
+    }
+
+    res.json({ ...session, child: { name: session.child.name } })
   } catch {
     res.status(500).json({ error: 'Ошибка сервера' })
   }
@@ -185,6 +201,21 @@ router.post('/:id/voice-usage', authMiddleware, async (req: AuthRequest, res: Re
   }
 
   try {
+    const session = await prisma.session.findUnique({
+      where: { id: sessionId },
+      select: { child_id: true, child: { select: { parent_id: true } } },
+    })
+
+    if (!session) {
+      res.status(404).json({ error: 'Сессия не найдена' })
+      return
+    }
+
+    if (!canAccessChild(req, session.child_id, session.child.parent_id)) {
+      res.status(403).json({ error: 'Нет доступа' })
+      return
+    }
+
     await prisma.voiceUsageEvent.create({
       data: {
         session_id: sessionId,
@@ -225,6 +256,11 @@ router.post('/:id/message', authMiddleware, async (req: AuthRequest, res: Respon
 
     if (!session) {
       res.status(404).json({ error: 'Сессия не найдена' })
+      return
+    }
+
+    if (!canAccessChild(req, session.child_id, session.child.parent_id)) {
+      res.status(403).json({ error: 'Нет доступа' })
       return
     }
 
