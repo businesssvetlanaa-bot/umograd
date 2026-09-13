@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express'
 import { PrismaClient, BuildingType } from '@prisma/client'
 import { authMiddleware, requireParent, AuthRequest } from '../middleware/authMiddleware'
 import { STARTER_BUILDINGS, BUILDINGS_CATALOG, getBuildingByType, BuildingDefinition } from '../data/buildings_catalog'
+import { childLoginThrottle, hashChildPin, isValidChildPin, normalizeParentEmail, parentOwnsChild, publicChildResponse, safeChildResponse } from '../services/childAccess'
 
 const router = Router()
 const prisma = new PrismaClient()
@@ -57,28 +58,17 @@ function parseCurriculumTopics(value: unknown): Array<{
 // GET /api/children/by-parent-email?email=...
 router.get('/by-parent-email', async (req: Request, res: Response): Promise<void> => {
   const raw = req.query['email']
-  const email = typeof raw === 'string' ? raw : undefined
+  const email = normalizeParentEmail(raw)
   if (!email) {
-    res.status(400).json({ error: 'Укажите email' })
+    res.status(400).json({ error: 'Введите корректный email родителя' })
     return
   }
   try {
     const user = await prisma.user.findUnique({
       where: { email },
-      include: {
-        children: {
-          select: {
-            id: true, name: true, grade: true, avatar_type: true, avatar_color: true,
-            xp: true, level: true, coins: true, streak_days: true,
-          },
-        },
-      },
+      select: { children: { select: { id: true, name: true, grade: true, pin: true } } },
     })
-    if (!user) {
-      res.status(404).json({ error: 'Родитель не найден' })
-      return
-    }
-    res.json(user.children)
+    res.json(user?.children.map(publicChildResponse) ?? [])
   } catch {
     res.status(500).json({ error: 'Ошибка сервера' })
   }
@@ -124,6 +114,10 @@ router.post('/', authMiddleware, requireParent, async (req: AuthRequest, res: Re
     res.status(400).json({ error: 'Выберите персонажа и цвет' })
     return
   }
+  if (pin !== undefined && !isValidChildPin(pin)) {
+    res.status(400).json({ error: 'PIN-код должен состоять ровно из 4 цифр' })
+    return
+  }
   if (grade !== 3 && grade !== 4) {
     res.status(400).json({ error: 'Сейчас доступны 3 и 4 классы' })
     return
@@ -137,6 +131,7 @@ router.post('/', authMiddleware, requireParent, async (req: AuthRequest, res: Re
   }
 
   try {
+    const hashedPin = pin ? await hashChildPin(pin) : null
     const child = await prisma.child.create({
       data: {
         parent_id:    req.user!.id,
@@ -144,7 +139,7 @@ router.post('/', authMiddleware, requireParent, async (req: AuthRequest, res: Re
         grade,
         avatar_type,
         avatar_color,
-        pin:          pin ?? null,
+        pin:          hashedPin,
         xp:           0,
         level:        1,
         streak_days:  0,
@@ -165,7 +160,7 @@ router.post('/', authMiddleware, requireParent, async (req: AuthRequest, res: Re
       })
     }
 
-    res.status(201).json(child)
+    res.status(201).json(safeChildResponse(child))
   } catch {
     res.status(500).json({ error: 'Ошибка сервера. Попробуйте позже' })
   }
@@ -210,6 +205,7 @@ router.get('/:id/dashboard', authMiddleware, async (req: AuthRequest, res: Respo
       coins:            child.coins,
       streak_days:      child.streak_days,
       last_active:      child.last_active,
+      has_pin:          Boolean(child.pin),
       direct_answer_allowed: child.direct_answer_allowed,
       subject_progress: child.subject_progress,
       buildings:        child.buildings,
@@ -515,6 +511,34 @@ router.post('/:id/buildings', authMiddleware, async (req: AuthRequest, res: Resp
   }
 })
 
+// PUT /api/children/:id/pin — установить или сменить PIN ребёнка
+router.put('/:id/pin', authMiddleware, requireParent, async (req: AuthRequest, res: Response): Promise<void> => {
+  const childId = req.params['id'] as string
+  const { pin } = req.body as { pin?: unknown }
+  if (!isValidChildPin(pin)) { res.status(400).json({ error: 'PIN-код должен состоять ровно из 4 цифр' }); return }
+  try {
+    const child = await prisma.child.findUnique({ where: { id: childId }, select: { parent_id: true } })
+    if (!child) { res.status(404).json({ error: 'Профиль не найден' }); return }
+    if (!parentOwnsChild(req.user!.id, child.parent_id)) { res.status(403).json({ error: 'Нет доступа' }); return }
+    await prisma.child.update({ where: { id: childId }, data: { pin: await hashChildPin(pin) } })
+    childLoginThrottle.clearChild(childId)
+    res.json({ success: true, has_pin: true })
+  } catch { res.status(500).json({ error: 'Ошибка сервера' }) }
+})
+
+// DELETE /api/children/:id/pin — запретить самостоятельный вход ребёнка
+router.delete('/:id/pin', authMiddleware, requireParent, async (req: AuthRequest, res: Response): Promise<void> => {
+  const childId = req.params['id'] as string
+  try {
+    const child = await prisma.child.findUnique({ where: { id: childId }, select: { parent_id: true } })
+    if (!child) { res.status(404).json({ error: 'Профиль не найден' }); return }
+    if (!parentOwnsChild(req.user!.id, child.parent_id)) { res.status(403).json({ error: 'Нет доступа' }); return }
+    await prisma.child.update({ where: { id: childId }, data: { pin: null } })
+    childLoginThrottle.clearChild(childId)
+    res.json({ success: true, has_pin: false })
+  } catch { res.status(500).json({ error: 'Ошибка сервера' }) }
+})
+
 // PUT /api/children/:id — обновить имя или аватар
 router.put('/:id', authMiddleware, requireParent, async (req: AuthRequest, res: Response): Promise<void> => {
   const childId = req.params['id'] as string
@@ -543,7 +567,7 @@ router.put('/:id', authMiddleware, requireParent, async (req: AuthRequest, res: 
         ...(typeof direct_answer_allowed === 'boolean' ? { direct_answer_allowed } : {}),
       },
     })
-    res.json(updated)
+    res.json(safeChildResponse(updated))
   } catch {
     res.status(500).json({ error: 'Ошибка сервера' })
   }

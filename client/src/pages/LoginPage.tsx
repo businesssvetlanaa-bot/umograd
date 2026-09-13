@@ -1,16 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
-import type { Child } from '../types/auth'
+import { authApi } from '../api/auth'
+import type { ChildLoginProfile } from '../types/auth'
 import timMascot from '../assets/tim-mascot.png'
-
-const AVATAR_EMOJI: Record<string, string> = {
-  explorer: '🧭', witch: '🔮', builder: '🔨', ranger: '🗺️',
-}
-
-const COLOR_BG: Record<string, string> = {
-  blue: '#DBEAFE', green: '#DCFCE7', orange: '#FFEDD5', purple: '#EDE9FE',
-}
 
 type Tab = 'parent' | 'child'
 
@@ -95,9 +88,9 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [parentEmail, setParentEmail] = useState(() => localStorage.getItem('childLogin_parentEmail') ?? '')
-  const [children, setChildren] = useState<Child[]>([])
+  const [children, setChildren] = useState<ChildLoginProfile[]>([])
   const [childrenLoading, setChildrenLoading] = useState(false)
-  const [selectedChild, setSelectedChild] = useState<Child | null>(null)
+  const [selectedChild, setSelectedChild] = useState<ChildLoginProfile | null>(null)
   const [pin, setPin] = useState('')
 
   useEffect(() => { setError('') }, [tab])
@@ -119,12 +112,11 @@ export default function LoginPage() {
     if (!parentEmail) { setError('Введите email родителя'); return }
     setError(''); setChildrenLoading(true)
     try {
-      const resp = await fetch(`/api/children/by-parent-email?email=${encodeURIComponent(parentEmail)}`)
-      if (!resp.ok) throw new Error('Родитель не найден')
-      const data: Child[] = await resp.json()
+      const normalizedEmail = parentEmail.trim().toLocaleLowerCase('en-US')
+      const data = await authApi.findChildProfiles(normalizedEmail)
       setChildren(data)
-      if (data.length === 0) setError('У этого родителя нет созданных профилей детей')
-      else localStorage.setItem('childLogin_parentEmail', parentEmail)
+      if (data.length === 0) setError('Профили не найдены. Проверь email или попроси родителя помочь со входом.')
+      else localStorage.setItem('childLogin_parentEmail', normalizedEmail)
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Родитель не найден')
     } finally { setChildrenLoading(false) }
@@ -132,6 +124,8 @@ export default function LoginPage() {
 
   async function handleChildLogin() {
     if (!selectedChild) { setError('Выберите профиль'); return }
+    if (!selectedChild.has_pin) { setError('Для этого героя самостоятельный вход пока выключен. Попроси родителя установить PIN-код.'); return }
+    if (pin.length !== 4) { setError('Введи PIN-код из 4 цифр'); return }
     setError(''); setLoading(true)
     try {
       const data = await childLogin(selectedChild.id, pin)
@@ -222,44 +216,47 @@ export default function LoginPage() {
                   </button>
                 </form>
               ) : (
-                <div className="flex flex-col gap-4">
+                <form className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); void handleChildLogin() }}>
                   <p className="text-sm font-bold text-slate-700">Выбери своего героя:</p>
                   <div className="grid grid-cols-2 gap-3">
                     {children.map((child) => (
                       <button
                         key={child.id}
                         type="button"
-                        onClick={() => setSelectedChild(child)}
+                        onClick={() => { setSelectedChild(child); setPin(''); setError('') }}
                         className="rounded-2xl border-2 p-4 text-center transition hover:-translate-y-0.5"
                         style={{
-                          background: COLOR_BG[child.avatar_color] || '#F3F4F6',
+                          background: child.has_pin ? '#ECFDF5' : '#F8FAFC',
                           borderColor: selectedChild?.id === child.id ? '#4F46E5' : 'transparent',
                           boxShadow: selectedChild?.id === child.id ? '0 0 0 3px rgba(79,70,229,.14)' : 'none',
                         }}
                       >
-                        <div className="mb-1 text-4xl">{AVATAR_EMOJI[child.avatar_type] || '🎮'}</div>
+                        <div className="mb-1 text-4xl">🎮</div>
                         <div className="text-sm font-black text-slate-800">{child.name}</div>
-                        <div className="text-xs font-semibold text-slate-500">Уровень {child.level} · ⭐ {child.xp}</div>
+                        <div className="text-xs font-semibold text-slate-500">{child.grade} класс · {child.has_pin ? 'PIN настроен' : 'вход выключен'}</div>
                       </button>
                     ))}
                   </div>
 
-                  {selectedChild && (
+                  {selectedChild?.has_pin && (
                     <div>
-                      <label className="mb-1.5 block text-sm font-bold text-slate-700" htmlFor="child-pin">PIN-код (если задан)</label>
-                      <input id="child-pin" type="password" inputMode="numeric" maxLength={4} placeholder="Можно оставить пустым" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} className={`${inputClass} text-center text-xl tracking-[.45em]`} />
+                      <label className="mb-1.5 block text-sm font-bold text-slate-700" htmlFor="child-pin">PIN-код</label>
+                      <input id="child-pin" type="password" inputMode="numeric" autoComplete="one-time-code" maxLength={4} placeholder="4 цифры" value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} className={`${inputClass} text-center text-xl tracking-[.45em]`} />
                     </div>
+                  )}
+                  {selectedChild && !selectedChild.has_pin && (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-relaxed text-amber-800">Самостоятельный вход для этого героя выключен. Попроси родителя открыть кабинет и установить PIN-код.</div>
                   )}
 
                   {error && <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-600" role="alert">{error}</div>}
 
                   <div className="grid grid-cols-[.8fr_1.2fr] gap-2">
                     <button type="button" onClick={() => { setChildren([]); setSelectedChild(null); setPin(''); setError('') }} className="min-h-13 rounded-2xl border-2 border-slate-200 font-bold text-slate-600 transition hover:bg-slate-50">← Назад</button>
-                    <button type="button" onClick={handleChildLogin} disabled={!selectedChild || loading} className="min-h-13 rounded-2xl bg-[linear-gradient(135deg,#0d9488,#0f766e)] px-4 font-black text-white shadow-[0_10px_24px_rgba(13,148,136,.24)] transition hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50">
-                      {loading ? 'Входим…' : 'Войти в Умоград ✨'}
+                    <button type="submit" disabled={!selectedChild?.has_pin || pin.length !== 4 || loading} className="min-h-13 rounded-2xl bg-[linear-gradient(135deg,#0d9488,#0f766e)] px-4 font-black text-white shadow-[0_10px_24px_rgba(13,148,136,.24)] transition hover:-translate-y-0.5 active:translate-y-0 disabled:opacity-50">
+                      {loading ? 'Входим…' : 'Войти по PIN →'}
                     </button>
                   </div>
-                </div>
+                </form>
               )}
             </div>
           )}

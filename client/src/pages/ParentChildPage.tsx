@@ -641,6 +641,10 @@ export default function ParentChildPage() {
   const [activeTab, setActiveTab] = useState<Tab>('progress')
   const [savingHelpMode, setSavingHelpMode] = useState(false)
   const [helpModeError, setHelpModeError] = useState('')
+  const [pinValue, setPinValue] = useState('')
+  const [savingPin, setSavingPin] = useState(false)
+  const [pinMessage, setPinMessage] = useState('')
+  const [pinError, setPinError] = useState('')
 
   useEffect(() => {
     if (!id) return
@@ -662,6 +666,29 @@ export default function ParentChildPage() {
     } finally {
       setSavingHelpMode(false)
     }
+  }
+
+  async function savePin() {
+    if (!id || !child || savingPin) return
+    if (!/^\d{4}$/u.test(pinValue)) { setPinError('Введите ровно 4 цифры'); return }
+    setSavingPin(true); setPinError(''); setPinMessage('')
+    try {
+      await childrenApi.setPin(id, pinValue)
+      setChild({ ...child, has_pin: true }); setPinValue('')
+      setPinMessage(child.has_pin ? 'PIN-код изменён' : 'Самостоятельный вход включён')
+    } catch (error: unknown) { setPinError(error instanceof Error ? error.message : 'Не удалось сохранить PIN-код') }
+    finally { setSavingPin(false) }
+  }
+
+  async function disablePin() {
+    if (!id || !child || savingPin) return
+    setSavingPin(true); setPinError(''); setPinMessage('')
+    try {
+      await childrenApi.disablePin(id)
+      setChild({ ...child, has_pin: false }); setPinValue('')
+      setPinMessage('Самостоятельный вход выключен')
+    } catch (error: unknown) { setPinError(error instanceof Error ? error.message : 'Не удалось выключить PIN-код') }
+    finally { setSavingPin(false) }
   }
 
   if (loading) {
@@ -745,6 +772,24 @@ export default function ParentChildPage() {
               </button>
             </div>
             {helpModeError && <p className="mt-3 text-sm font-semibold text-red-600">{helpModeError}</p>}
+          </section>
+        )}
+        {child && (
+          <section className="mb-5 rounded-2xl border border-teal-100 bg-white p-4 shadow-sm">
+            <h2 className="font-bold text-gray-800">Самостоятельный вход ребёнка</h2>
+            <p className="mt-1 text-sm text-gray-500">{child.has_pin ? 'Вход по PIN включён. Можно задать новый код или выключить самостоятельный вход.' : 'Вход ребёнка без родителя выключен. Установите PIN из 4 цифр, чтобы включить его.'}</p>
+            <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
+              <input type="password" inputMode="numeric" autoComplete="new-password" maxLength={4}
+                aria-label={child.has_pin ? 'Новый PIN-код' : 'PIN-код ребёнка'} placeholder={child.has_pin ? 'Новый PIN' : '4 цифры'}
+                value={pinValue} onChange={(event) => { setPinValue(event.target.value.replace(/\D/g, '')); setPinError(''); setPinMessage('') }}
+                className="min-h-11 rounded-xl border-2 border-gray-200 bg-gray-50 px-4 text-center text-lg tracking-[.35em] outline-none transition focus:border-teal-500 focus:bg-white" />
+              <button type="button" onClick={() => { void savePin() }} disabled={savingPin || pinValue.length !== 4} className="min-h-11 rounded-xl bg-teal-600 px-4 text-sm font-bold text-white transition hover:bg-teal-700 disabled:opacity-50">
+                {savingPin ? 'Сохраняем…' : child.has_pin ? 'Сменить PIN' : 'Установить PIN'}
+              </button>
+              {child.has_pin && <button type="button" onClick={() => { void disablePin() }} disabled={savingPin} className="min-h-11 rounded-xl border border-red-200 px-4 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-50">Выключить вход</button>}
+            </div>
+            {pinMessage && <p className="mt-3 text-sm font-semibold text-emerald-600">{pinMessage}</p>}
+            {pinError && <p className="mt-3 text-sm font-semibold text-red-600">{pinError}</p>}
           </section>
         )}
         {id && activeTab === 'progress'   && <ProgressTab childId={id} />}

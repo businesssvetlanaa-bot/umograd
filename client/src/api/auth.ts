@@ -19,6 +19,9 @@ export const authApi = {
       body: JSON.stringify(body),
     }),
 
+  findChildProfiles: (parentEmail: string) =>
+    request<import('../types/auth').ChildLoginProfile[]>(`/children/by-parent-email?email=${encodeURIComponent(parentEmail)}`),
+
   me: () => request<{ role: 'parent' | 'child'; user?: import('../types/auth').User; child?: import('../types/auth').Child }>('/auth/me'),
 
   getChildren: (parentId: string) =>

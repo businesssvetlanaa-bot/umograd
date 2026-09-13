@@ -15,6 +15,13 @@ export interface Child {
   streak_days: number
 }
 
+export interface ChildLoginProfile {
+  id: string
+  name: string
+  grade: number
+  has_pin: boolean
+}
+
 export interface AuthState {
   token: string | null
   role: 'parent' | 'child' | null

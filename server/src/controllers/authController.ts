@@ -2,6 +2,14 @@ import { Request, Response } from 'express'
 import bcrypt from 'bcryptjs'
 import jwt from 'jsonwebtoken'
 import { PrismaClient } from '@prisma/client'
+import {
+  CHILD_LOGIN_ERROR,
+  childLoginThrottle,
+  hashChildPin,
+  isValidChildPin,
+  normalizeParentEmail,
+  verifyChildPin,
+} from '../services/childAccess'
 
 const prisma = new PrismaClient()
 
@@ -18,8 +26,8 @@ export async function register(req: Request, res: Response): Promise<void> {
     return
   }
 
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  if (!emailRegex.test(email)) {
+  const normalizedEmail = normalizeParentEmail(email)
+  if (!normalizedEmail) {
     res.status(400).json({ error: 'Введите корректный email' })
     return
   }
@@ -30,7 +38,7 @@ export async function register(req: Request, res: Response): Promise<void> {
   }
 
   try {
-    const existing = await prisma.user.findUnique({ where: { email } })
+    const existing = await prisma.user.findUnique({ where: { email: normalizedEmail } })
     if (existing) {
       res.status(409).json({ error: 'Этот email уже зарегистрирован' })
       return
@@ -38,7 +46,7 @@ export async function register(req: Request, res: Response): Promise<void> {
 
     const hashed = await bcrypt.hash(password, 10)
     const user = await prisma.user.create({
-      data: { name, email, password: hashed },
+      data: { name, email: normalizedEmail, password: hashed },
     })
 
     const token = signToken({ id: user.id, email: user.email, role: 'parent' })
@@ -57,8 +65,14 @@ export async function login(req: Request, res: Response): Promise<void> {
     return
   }
 
+  const normalizedEmail = normalizeParentEmail(email)
+  if (!normalizedEmail) {
+    res.status(401).json({ error: 'Неверный email или пароль' })
+    return
+  }
+
   try {
-    const user = await prisma.user.findUnique({ where: { email } })
+    const user = await prisma.user.findUnique({ where: { email: normalizedEmail } })
     if (!user) {
       res.status(401).json({ error: 'Неверный email или пароль' })
       return
@@ -81,20 +95,26 @@ export async function login(req: Request, res: Response): Promise<void> {
 export async function childLogin(req: Request, res: Response): Promise<void> {
   const { child_id, pin } = req.body
 
-  if (!child_id) {
-    res.status(400).json({ error: 'Выберите профиль ребёнка' })
+  if (typeof child_id !== 'string' || !child_id.trim() || child_id.length > 128 || !isValidChildPin(pin)) {
+    res.status(400).json({ error: 'Выберите профиль и введите PIN-код из 4 цифр' })
+    return
+  }
+
+  const normalizedChildId = child_id.trim()
+  const throttleKey = childLoginThrottle.key(req.ip, normalizedChildId)
+  const retryAfter = childLoginThrottle.retryAfterSeconds(throttleKey)
+  if (retryAfter !== null) {
+    res.set('Retry-After', String(retryAfter))
+    res.status(429).json({ error: 'Слишком много попыток. Попробуйте позже.' })
     return
   }
 
   try {
-    const child = await prisma.child.findUnique({ where: { id: child_id } })
-    if (!child) {
-      res.status(404).json({ error: 'Профиль не найден' })
-      return
-    }
-
-    if (child.pin && child.pin !== (pin ?? '')) {
-      res.status(401).json({ error: 'Неверный PIN-код' })
+    const child = await prisma.child.findUnique({ where: { id: normalizedChildId } })
+    const verification = await verifyChildPin(child?.pin ?? null, pin)
+    if (!child || !verification.valid) {
+      childLoginThrottle.recordFailure(throttleKey)
+      res.status(401).json({ error: CHILD_LOGIN_ERROR })
       return
     }
 
@@ -113,10 +133,16 @@ export async function childLogin(req: Request, res: Response): Promise<void> {
       newStreak = 1
     }
 
+    const migratedPin = verification.needsRehash ? await hashChildPin(pin) : undefined
     await prisma.child.update({
-      where: { id: child_id },
-      data: { last_active: now, streak_days: newStreak },
+      where: { id: normalizedChildId },
+      data: {
+        last_active: now,
+        streak_days: newStreak,
+        ...(migratedPin ? { pin: migratedPin } : {}),
+      },
     })
+    childLoginThrottle.clear(throttleKey)
 
     const token = signToken({ id: child.id, role: 'child' })
     res.json({

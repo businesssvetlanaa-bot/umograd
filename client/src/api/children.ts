@@ -26,6 +26,7 @@ export interface ChildDashboard {
   coins: number
   streak_days: number
   last_active: string | null
+  has_pin: boolean
   direct_answer_allowed: boolean
   subject_progress: Array<{
     subject: 'math' | 'russian' | 'english'
@@ -82,6 +83,12 @@ export const childrenApi = {
 
   update: (id: string, body: { name?: string; grade?: number; avatar_type?: string; avatar_color?: string; direct_answer_allowed?: boolean }) =>
     request<{ id: string }>(`/children/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+
+  setPin: (id: string, pin: string) =>
+    request<{ success: true; has_pin: true }>(`/children/${id}/pin`, { method: 'PUT', body: JSON.stringify({ pin }) }),
+
+  disablePin: (id: string) =>
+    request<{ success: true; has_pin: false }>(`/children/${id}/pin`, { method: 'DELETE' }),
 
   buildings: (id: string) =>
     request<BuildingItem[]>(`/children/${id}/buildings`),
