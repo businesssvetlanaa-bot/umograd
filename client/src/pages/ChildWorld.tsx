@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { childrenApi, type ChildDashboard, type BuildingItem } from '../api/children'
@@ -30,11 +30,12 @@ const SUBJECTS = [
 interface BuildPanelProps {
   buildings: BuildingItem[]
   coins: number
+  busy: boolean
   onClose: () => void
   onPlace: (building_type: string, emoji: string) => void
 }
 
-function BuildPanel({ buildings, coins, onClose, onPlace }: BuildPanelProps) {
+function BuildPanel({ buildings, coins, busy, onClose, onPlace }: BuildPanelProps) {
   return (
     <motion.div
       initial={{ x: '100%' }}
@@ -62,6 +63,7 @@ function BuildPanel({ buildings, coins, onClose, onPlace }: BuildPanelProps) {
       <div className="flex-1 overflow-y-auto p-3 grid grid-cols-2 gap-2 content-start">
         {buildings.map((b) => {
           const locked = !b.unlocked
+          const unaffordable = !b.owned && coins < b.cost
           return (
             <div
               key={b.building_type}
@@ -83,10 +85,11 @@ function BuildPanel({ buildings, coins, onClose, onPlace }: BuildPanelProps) {
                   </span>
                   <button
                     onClick={() => onPlace(b.building_type, b.emoji)}
-                    className="mt-1 w-full py-1 rounded-lg text-xs font-bold text-white transition-all active:scale-95"
+                    disabled={busy || unaffordable}
+                    className="mt-1 w-full py-1 rounded-lg text-xs font-bold text-white transition-all active:scale-95 disabled:cursor-not-allowed disabled:opacity-50"
                     style={{ background: 'var(--color-primary)' }}
                   >
-                    {b.placed ? 'Переместить' : 'Поставить'}
+                    {unaffordable ? 'Не хватает монет' : b.placed ? 'Переместить' : 'Поставить'}
                   </button>
                 </>
               )}
@@ -113,6 +116,8 @@ export default function ChildWorld() {
   const [showBuildPanel, setShowBuildPanel]   = useState(false)
   const [placingBuilding, setPlacingBuilding] = useState<string | null>(null)
   const [placingEmoji, setPlacingEmoji]       = useState('')
+  const placementRequestRef = useRef(false)
+  const [placementBusy, setPlacementBusy] = useState(false)
 
   // Initial load
   useEffect(() => {
@@ -146,11 +151,19 @@ export default function ChildWorld() {
   }
 
   async function handlePlaceBuilding(x: number, y: number) {
-    if (!placingBuilding || !id) return
+    if (!placingBuilding || !id || placementRequestRef.current) return
+    const buildingType = placingBuilding
+    placementRequestRef.current = true
+    setPlacementBusy(true)
     setPlacingBuilding(null)
     setPlacingEmoji('')
     try {
-      await childrenApi.placeBuilding(id, { building_type: placingBuilding, position_x: x, position_y: y })
+      const result = await childrenApi.placeBuilding(id, {
+        building_type: buildingType,
+        position_x: x,
+        position_y: y,
+      })
+      setDashboard((current) => current ? { ...current, coins: result.coins } : current)
       const [dash, buildings] = await Promise.all([
         childrenApi.dashboard(id),
         childrenApi.buildings(id),
@@ -160,10 +173,14 @@ export default function ChildWorld() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'Ошибка'
       alert(msg)
+    } finally {
+      placementRequestRef.current = false
+      setPlacementBusy(false)
     }
   }
 
   function startPlacing(building_type: string, emoji: string) {
+    if (placementRequestRef.current) return
     setShowBuildPanel(false)
     setPlacingBuilding(building_type)
     setPlacingEmoji(emoji)
@@ -300,6 +317,7 @@ export default function ChildWorld() {
             </Link>
             <button
               onClick={() => setShowBuildPanel(true)}
+              disabled={placementBusy}
               className="flex-1 py-3 rounded-2xl font-bold text-white text-xs sm:text-sm active:scale-95 transition-transform shadow-md"
               style={{ background: 'var(--color-secondary)' }}
             >
@@ -337,6 +355,7 @@ export default function ChildWorld() {
           <BuildPanel
             buildings={buildingList}
             coins={dashboard.coins}
+            busy={placementBusy}
             onClose={() => setShowBuildPanel(false)}
             onPlace={startPlacing}
           />

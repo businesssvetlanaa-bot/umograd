@@ -15,6 +15,18 @@ export interface BuildingItem {
   id: string | null
 }
 
+export interface BuildingPlacementResult {
+  success: true
+  purchased_now: boolean
+  coins: number
+  building: {
+    id: string
+    building_type: string
+    placed: boolean
+    position_x: number | null
+    position_y: number | null
+  }
+}
 export interface ChildDashboard {
   id: string
   name: string
@@ -94,7 +106,7 @@ export const childrenApi = {
     request<BuildingItem[]>(`/children/${id}/buildings`),
 
   placeBuilding: (id: string, body: { building_type: string; position_x: number; position_y: number }) =>
-    request<{ id: string }>(`/children/${id}/buildings`, { method: 'POST', body: JSON.stringify(body) }),
+    request<BuildingPlacementResult>(`/children/${id}/buildings`, { method: 'POST', body: JSON.stringify(body) }),
 
   curricula: (id: string) =>
     request<ChildCurriculum[]>(`/children/${id}/curricula`),

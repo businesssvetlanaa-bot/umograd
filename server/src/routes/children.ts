@@ -5,6 +5,13 @@ import { prisma } from '../lib/prisma'
 import { STARTER_BUILDINGS, BUILDINGS_CATALOG, getBuildingByType, BuildingDefinition } from '../data/buildings_catalog'
 import { childLoginThrottle, hashChildPin, isValidChildPin, normalizeParentEmail, parentOwnsChild, publicChildResponse, safeChildResponse } from '../services/childAccess'
 import { confirmsChildDeletion } from '../services/accountSecurity'
+import {
+  BuildingPurchaseOverloadedError,
+  buildingPlacementResponse,
+  buildingPurchaseMutex,
+  canonicalBuilding,
+  parseBuildingPlacement,
+} from '../services/buildingPurchase'
 
 const router = Router()
 
@@ -448,10 +455,10 @@ router.get('/:id/buildings', authMiddleware, async (req: AuthRequest, res: Respo
 // ─── POST /api/children/:id/buildings ────────────────────────────────────────
 router.post('/:id/buildings', authMiddleware, async (req: AuthRequest, res: Response): Promise<void> => {
   const childId = req.params['id'] as string
-  const { building_type, position_x, position_y } = req.body as {
-    building_type: string
-    position_x: number
-    position_y: number
+  const input = parseBuildingPlacement(req.body)
+  if (!input) {
+    res.status(400).json({ error: 'Проверьте тип постройки и место на карте' })
+    return
   }
 
   if (req.user!.role === 'child' && req.user!.id !== childId) {
@@ -459,59 +466,83 @@ router.post('/:id/buildings', authMiddleware, async (req: AuthRequest, res: Resp
     return
   }
 
-  const def = getBuildingByType(building_type as BuildingType)
+  const def = getBuildingByType(input.building_type as BuildingType)
   if (!def) { res.status(400).json({ error: 'Неизвестная постройка' }); return }
 
   try {
-    const child = await prisma.child.findUnique({
-      where: { id: childId },
-      include: { buildings: true, subject_progress: true },
-    })
-    if (!child) { res.status(404).json({ error: 'Профиль не найден' }); return }
-
-    if (req.user!.role === 'parent' && child.parent_id !== req.user!.id) {
-      res.status(403).json({ error: 'Нет доступа' })
-      return
-    }
-
-    const existing = child.buildings.find((b) => b.building_type === building_type)
-
-    if (existing) {
-      // Постройка уже куплена — просто перемещаем
-      const updated = await prisma.building.update({
-        where: { id: existing.id },
-        data: { placed: true, position_x, position_y },
+    const result = await buildingPurchaseMutex.run(childId, () => prisma.$transaction(async (tx) => {
+      const child = await tx.child.findUnique({
+        where: { id: childId },
+        include: {
+          buildings: {
+            where: { building_type: def.type },
+            orderBy: [{ purchased_at: 'asc' }, { id: 'asc' }],
+          },
+          subject_progress: true,
+        },
       })
-      res.json(updated)
+      if (!child) return { status: 404, body: { error: 'Профиль не найден' } } as const
+      if (req.user!.role === 'parent' && child.parent_id !== req.user!.id) {
+        return { status: 403, body: { error: 'Нет доступа' } } as const
+      }
+
+      const existing = canonicalBuilding(child.buildings)
+      if (existing) {
+        const building = await tx.building.update({
+          where: { id: existing.id },
+          data: { placed: true, position_x: input.position_x, position_y: input.position_y },
+        })
+        return { status: 200, body: buildingPlacementResponse(building, child.coins, false) } as const
+      }
+
+      const sessionsCount = await tx.session.count({ where: { child_id: childId, completed: true } })
+      if (!checkUnlocked(def, child, sessionsCount)) {
+        return { status: 400, body: { error: 'Постройка ещё не разблокирована' } } as const
+      }
+      if (child.coins < def.cost) {
+        return { status: 400, body: { error: 'Недостаточно монет' } } as const
+      }
+
+      const updatedAt = new Date(Math.max(Date.now(), child.updated_at.getTime() + 1))
+      const debit = await tx.child.updateMany({
+        where: { id: childId, coins: { gte: def.cost }, updated_at: child.updated_at },
+        data: { coins: { decrement: def.cost }, updated_at: updatedAt },
+      })
+      if (debit.count !== 1) {
+        return { status: 409, body: { error: 'Состояние мира изменилось. Попробуйте ещё раз' } } as const
+      }
+
+      const building = await tx.building.create({
+        data: {
+          child_id: childId,
+          building_type: def.type,
+          placed: true,
+          position_x: input.position_x,
+          position_y: input.position_y,
+        },
+      })
+      return {
+        status: 201,
+        body: buildingPlacementResponse(building, child.coins - def.cost, true),
+      } as const
+    }))
+    res.status(result.status).json(result.body)
+  } catch (error) {
+    if (error instanceof BuildingPurchaseOverloadedError) {
+      res.set('Retry-After', String(error.retryAfterSeconds))
+      res.status(429).json({ error: 'Слишком много запросов. Попробуйте ещё раз' })
       return
     }
-
-    // Проверяем монеты и разблокировку
-    if (child.coins < def.cost) {
-      res.status(400).json({ error: 'Недостаточно монет' })
+    const code = typeof error === 'object' && error !== null && 'code' in error
+      ? String((error as { code?: unknown }).code)
+      : ''
+    if (code === 'P1008' || code === 'P2028' || code === 'P2034') {
+      res.status(409).json({ error: 'Состояние мира изменилось. Попробуйте ещё раз' })
       return
     }
-
-    const sessionsCount = await prisma.session.count({
-      where: { child_id: childId, completed: true },
-    })
-    if (!checkUnlocked(def, child, sessionsCount)) {
-      res.status(400).json({ error: 'Постройка ещё не разблокирована' })
-      return
-    }
-
-    // Списываем монеты и создаём постройку
-    await prisma.child.update({ where: { id: childId }, data: { coins: { decrement: def.cost } } })
-    const building = await prisma.building.create({
-      data: { child_id: childId, building_type: building_type as BuildingType, placed: true, position_x, position_y },
-    })
-
-    res.status(201).json(building)
-  } catch {
     res.status(500).json({ error: 'Ошибка сервера' })
   }
 })
-
 // PUT /api/children/:id/pin — установить или сменить PIN ребёнка
 router.put('/:id/pin', authMiddleware, requireParent, async (req: AuthRequest, res: Response): Promise<void> => {
   const childId = req.params['id'] as string
