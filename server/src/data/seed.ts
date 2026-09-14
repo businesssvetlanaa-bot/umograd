@@ -1,6 +1,10 @@
 import { PrismaClient, Subject } from '@prisma/client'
 import topicsData from './topics_fgos.json'
 
+if (process.env.NODE_ENV === 'production') {
+  throw new Error('Seed is disabled in production')
+}
+
 const prisma = new PrismaClient()
 
 type SubjectKey = 'math' | 'russian' | 'english'

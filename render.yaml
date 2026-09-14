@@ -1,3 +1,4 @@
+# Persistent storage is not provisioned here; mount it before confirming production DB safety.
 services:
   - type: web
     name: umograd
@@ -6,8 +7,13 @@ services:
     plan: free
     buildCommand: npm run build
     startCommand: npm start
+    healthCheckPath: /api/ready
     envVars:
+      - key: NODE_ENV
+        value: production
       - key: DATABASE_URL
+        sync: false
+      - key: UMOGRAD_PERSISTENT_DB_CONFIRMED
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false

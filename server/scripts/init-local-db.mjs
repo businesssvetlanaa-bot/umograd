@@ -1,6 +1,12 @@
+import 'dotenv/config'
 import { DatabaseSync } from 'node:sqlite'
 import { fileURLToPath } from 'node:url'
 import path from 'node:path'
+
+if (process.env.NODE_ENV === 'production') {
+  console.error('Local database initializer is disabled in production')
+  process.exit(1)
+}
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url))
 const dbPath = path.join(scriptDir, '..', 'prisma', 'dev.db')

@@ -3,10 +3,12 @@
   "version": "1.0.0",
   "private": true,
   "engines": {
-    "node": ">=20"
+    "node": ">=22.13"
   },
   "scripts": {
     "build": "cd client && npm ci --include=dev && npm run build && cd ../server && npm ci --include=dev && npx prisma generate && npm run build",
-    "start": "cd server && npm run db:init:local && npm run db:seed && node dist/index.js"
+    "start": "cd server && npm start",
+    "start:local": "cd server && npm run start:local",
+    "preflight": "cd server && npm run preflight"
   }
 }
