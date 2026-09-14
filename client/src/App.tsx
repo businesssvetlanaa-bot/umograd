@@ -8,6 +8,7 @@ import ChildWorld from './pages/ChildWorld'
 import TutorPage from './pages/TutorPage'
 import SessionPage from './pages/SessionPage'
 import ParentChildPage from './pages/ParentChildPage'
+import ParentSettingsPage from './pages/ParentSettingsPage'
 
 function RequireParent({ children }: { children: React.ReactNode }) {
   const { token, role, loading } = useAuth()
@@ -35,6 +36,9 @@ export default function App() {
       } />
       <Route path="/parent/dashboard" element={
         <RequireParent><ParentDashboard /></RequireParent>
+      } />
+      <Route path="/parent/settings" element={
+        <RequireParent><ParentSettingsPage /></RequireParent>
       } />
       <Route path="/parent/children/:id" element={
         <RequireParent><ParentChildPage /></RequireParent>

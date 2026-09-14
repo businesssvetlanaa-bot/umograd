@@ -645,6 +645,9 @@ export default function ParentChildPage() {
   const [savingPin, setSavingPin] = useState(false)
   const [pinMessage, setPinMessage] = useState('')
   const [pinError, setPinError] = useState('')
+  const [deleteConfirmation, setDeleteConfirmation] = useState('')
+  const [deletingChild, setDeletingChild] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => {
     if (!id) return
@@ -691,6 +694,20 @@ export default function ParentChildPage() {
     finally { setSavingPin(false) }
   }
 
+  async function deleteChildProfile() {
+    if (!id || !child || deletingChild) return
+    const requiredPhrase = '\u0423\u0414\u0410\u041b\u0418\u0422\u042c ' + child.name
+    if (deleteConfirmation !== requiredPhrase) return
+    setDeletingChild(true)
+    setDeleteError('')
+    try {
+      await childrenApi.delete(id, deleteConfirmation)
+      navigate('/parent/dashboard', { replace: true })
+    } catch (error: unknown) {
+      setDeleteError(error instanceof Error ? error.message : '\u041d\u0435 \u0443\u0434\u0430\u043b\u043e\u0441\u044c \u0443\u0434\u0430\u043b\u0438\u0442\u044c \u043f\u0440\u043e\u0444\u0438\u043b\u044c')
+      setDeletingChild(false)
+    }
+  }
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--color-bg)' }}>
@@ -790,6 +807,20 @@ export default function ParentChildPage() {
             </div>
             {pinMessage && <p className="mt-3 text-sm font-semibold text-emerald-600">{pinMessage}</p>}
             {pinError && <p className="mt-3 text-sm font-semibold text-red-600">{pinError}</p>}
+          </section>
+        )}
+        {child && (
+          <section className="mb-5 rounded-2xl border border-red-200 bg-white p-4 shadow-sm">
+            <h2 className="font-bold text-red-700">{'\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043f\u0440\u043e\u0444\u0438\u043b\u044c \u0440\u0435\u0431\u0451\u043d\u043a\u0430'}</h2>
+            <p className="mt-1 text-sm text-gray-500">{'\u0417\u0430\u043d\u044f\u0442\u0438\u044f, \u043f\u0440\u043e\u0433\u0440\u0435\u0441\u0441 \u0438 \u043d\u0430\u0433\u0440\u0430\u0434\u044b \u0431\u0443\u0434\u0443\u0442 \u0443\u0434\u0430\u043b\u0435\u043d\u044b \u0431\u0435\u0437\u0432\u043e\u0437\u0432\u0440\u0430\u0442\u043d\u043e.'}</p>
+            <label className="mt-4 block text-sm font-semibold text-gray-700">
+              {'\u0412\u0432\u0435\u0434\u0438\u0442\u0435 '}<span className="select-all font-mono text-red-700">{'\u0423\u0414\u0410\u041b\u0418\u0422\u042c ' + child.name}</span>
+              <input value={deleteConfirmation} onChange={(event) => { setDeleteConfirmation(event.target.value); setDeleteError('') }} autoComplete="off" className="mt-2 min-h-11 w-full rounded-xl border-2 border-gray-200 bg-gray-50 px-4 outline-none transition focus:border-red-500 focus:bg-white" />
+            </label>
+            {deleteError && <p role="alert" className="mt-3 text-sm font-semibold text-red-600">{deleteError}</p>}
+            <button type="button" onClick={() => { void deleteChildProfile() }} disabled={deletingChild || deleteConfirmation !== '\u0423\u0414\u0410\u041b\u0418\u0422\u042c ' + child.name} className="mt-4 min-h-11 rounded-xl bg-red-600 px-4 text-sm font-bold text-white transition hover:bg-red-700 disabled:opacity-50">
+              {deletingChild ? '\u0423\u0434\u0430\u043b\u044f\u0435\u043c\u2026' : '\u0423\u0434\u0430\u043b\u0438\u0442\u044c \u043f\u0440\u043e\u0444\u0438\u043b\u044c \u043d\u0430\u0432\u0441\u0435\u0433\u0434\u0430'}
+            </button>
           </section>
         )}
         {id && activeTab === 'progress'   && <ProgressTab childId={id} />}

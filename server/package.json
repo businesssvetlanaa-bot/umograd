@@ -9,6 +9,7 @@
     "build": "tsc",
     "test:local-tutor": "npm run build && node --test dist/services/localTutor.test.js",
     "test:child-access": "npm run build && node --test dist/services/childAccess.test.js",
+    "test:account-security": "npm run build && node --test dist/services/accountSecurity.test.js dist/services/accountLifecycle.test.js",
     "test:startup-safety": "npm run build && node --test dist/config/runtime.test.js dist/config/startupGuards.test.js dist/services/databaseReadiness.test.js",
     "start": "npm run preflight && node dist/index.js --production",
     "start:local": "npm run db:init:local && npm run db:seed && node dist/index.js",

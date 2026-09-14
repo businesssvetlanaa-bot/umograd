@@ -45,6 +45,7 @@ export function useAuth() {
       })
       .catch(() => {
         localStorage.removeItem('token')
+        localStorage.removeItem('parentToken')
         localStorage.removeItem('role')
         setState({ token: null, role: null, user: null, child: null, loading: false })
       })
@@ -104,6 +105,12 @@ export function useAuth() {
     }
   }, [])
 
+  const replaceParentToken = useCallback((token: string) => {
+    localStorage.setItem('token', token)
+    localStorage.setItem('parentToken', token)
+    localStorage.setItem('role', 'parent')
+    setState((current) => ({ ...current, token, role: 'parent', child: null }))
+  }, [])
   const logout = useCallback(() => {
     localStorage.removeItem('token')
     localStorage.removeItem('parentToken')
@@ -111,5 +118,5 @@ export function useAuth() {
     setState({ token: null, role: null, user: null, child: null, loading: false })
   }, [])
 
-  return { ...state, register, login, childLogin, exitChild, logout }
+  return { ...state, register, login, childLogin, exitChild, replaceParentToken, logout }
 }

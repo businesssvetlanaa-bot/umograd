@@ -107,4 +107,10 @@ export const childrenApi = {
       method: 'PUT',
       body: JSON.stringify({ enabled }),
     }),
+
+  delete: (id: string, confirmation: string) =>
+    request<{ success: true }>(`/children/${id}`, {
+      method: 'DELETE',
+      body: JSON.stringify({ confirmation }),
+    }),
 }

@@ -53,6 +53,13 @@ export default function ParentDashboard() {
         <div className="flex items-center gap-4">
           {user && <span className="text-gray-500 text-sm hidden sm:block">{user.name}</span>}
           <button
+            type="button"
+            onClick={() => navigate('/parent/settings')}
+            className="text-sm text-gray-500 hover:text-indigo-700 transition-colors font-medium"
+          >
+            {'\u041d\u0430\u0441\u0442\u0440\u043e\u0439\u043a\u0438'}
+          </button>
+          <button
             onClick={handleLogout}
             className="text-sm text-gray-500 hover:text-gray-800 transition-colors font-medium"
           >

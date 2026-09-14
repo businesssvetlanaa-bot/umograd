@@ -26,4 +26,16 @@ export const authApi = {
 
   getChildren: (parentId: string) =>
     request<import('../types/auth').Child[]>(`/children?parent_id=${parentId}`),
+
+  changePassword: (body: { current_password: string; new_password: string }) =>
+    request<{ success: true; token: string }>('/auth/password', {
+      method: 'PUT',
+      body: JSON.stringify(body),
+    }),
+
+  deleteAccount: (body: { current_password: string; confirmation: string }) =>
+    request<{ success: true }>('/auth/account', {
+      method: 'DELETE',
+      body: JSON.stringify(body),
+    }),
 }

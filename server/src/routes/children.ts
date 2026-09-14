@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express'
-import { PrismaClient, BuildingType } from '@prisma/client'
+import { BuildingType } from '@prisma/client'
 import { authMiddleware, requireParent, AuthRequest } from '../middleware/authMiddleware'
+import { prisma } from '../lib/prisma'
 import { STARTER_BUILDINGS, BUILDINGS_CATALOG, getBuildingByType, BuildingDefinition } from '../data/buildings_catalog'
 import { childLoginThrottle, hashChildPin, isValidChildPin, normalizeParentEmail, parentOwnsChild, publicChildResponse, safeChildResponse } from '../services/childAccess'
+import { confirmsChildDeletion } from '../services/accountSecurity'
 
 const router = Router()
-const prisma = new PrismaClient()
 
 type ChildOwner = { id: string; parent_id: string }
 type CurriculumTopicJson = {
@@ -573,4 +574,35 @@ router.put('/:id', authMiddleware, requireParent, async (req: AuthRequest, res: 
   }
 })
 
+// DELETE /api/children/:id — удалить принадлежащий родителю профиль и связанные данные
+router.delete('/:id', authMiddleware, requireParent, async (req: AuthRequest, res: Response): Promise<void> => {
+  const childId = req.params['id'] as string
+  const { confirmation } = req.body as { confirmation?: unknown }
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const child = await tx.child.findFirst({
+        where: { id: childId, parent_id: req.user!.id },
+        select: { id: true, name: true },
+      })
+      if (!child) return { status: 'not_found' as const }
+      if (!confirmsChildDeletion(confirmation, child.name)) return { status: 'invalid_confirmation' as const }
+      const deleted = await tx.child.deleteMany({ where: { id: child.id, parent_id: req.user!.id } })
+      return { status: deleted.count === 1 ? 'deleted' as const : 'not_found' as const }
+    })
+
+    if (result.status === 'not_found') {
+      res.status(404).json({ error: '\u041f\u0440\u043e\u0444\u0438\u043b\u044c \u043d\u0435 \u043d\u0430\u0439\u0434\u0435\u043d' })
+      return
+    }
+    if (result.status === 'invalid_confirmation') {
+      res.status(400).json({ error: '\u0412\u0432\u0435\u0434\u0438\u0442\u0435 \u0444\u0440\u0430\u0437\u0443 \u0443\u0434\u0430\u043b\u0435\u043d\u0438\u044f \u0442\u043e\u0447\u043d\u043e \u043a\u0430\u043a \u043f\u043e\u043a\u0430\u0437\u0430\u043d\u043e' })
+      return
+    }
+
+    childLoginThrottle.clearChild(childId)
+    res.json({ success: true })
+  } catch {
+    res.status(500).json({ error: '\u041e\u0448\u0438\u0431\u043a\u0430 \u0441\u0435\u0440\u0432\u0435\u0440\u0430' })
+  }
+})
 export default router
