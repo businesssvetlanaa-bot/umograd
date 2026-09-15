@@ -3,6 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { sessionsApi } from '../api/sessions'
 import { childrenApi, type LearningTopic } from '../api/children'
 import timMascot from '../assets/tim-mascot.png'
+import { VoiceDictationButton } from '../components/VoiceDictationButton'
 
 type InputMode = 'subject' | 'activity' | 'choose' | 'preview' | 'text' | 'topic'
 type Subject = 'math' | 'russian' | 'english'
@@ -64,6 +65,8 @@ export default function TutorPage() {
   const [topicsLoading, setTopicsLoading] = useState(false)
   const [topicsError, setTopicsError] = useState('')
   const [selectedTopic, setSelectedTopic] = useState<string | null>(null)
+
+  const dictationLanguage = subject === 'english' ? 'en-US' : 'ru-RU'
 
   useEffect(() => {
     if (mode !== 'topic' || !id) return
@@ -322,6 +325,16 @@ export default function TutorPage() {
               rows={4}
               className="w-full p-4 rounded-2xl border-2 border-gray-200 focus:border-[var(--color-primary)] outline-none resize-none bg-white"
             />
+            <VoiceDictationButton
+              language={dictationLanguage}
+              disabled={loading}
+              onTranscript={(transcript) => {
+                setTaskText(current => current ? `${current} ${transcript}` : transcript)
+                setSelectedTopic(null)
+              }}
+            />
+            <p className="-mt-2 text-center text-xs text-gray-500">Скажи тему или вопрос, потом проверь текст и начни занятие.</p>
+
             {error && <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">{error}</div>}
             <button
               onClick={submitTopic}
@@ -400,6 +413,13 @@ export default function TutorPage() {
               />
             </div>
 
+            <VoiceDictationButton
+              language={dictationLanguage}
+              disabled={loading}
+              onTranscript={(transcript) => setTaskHint(current => current ? `${current} ${transcript}` : transcript)}
+            />
+            <p className="-mt-2 text-center text-xs text-gray-500">Можно голосом назвать номер задания или объяснить, что непонятно.</p>
+
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
                 {error}
@@ -450,6 +470,13 @@ export default function TutorPage() {
               rows={5}
               className="w-full p-4 rounded-2xl border-2 border-gray-200 focus:border-[var(--color-primary)] outline-none resize-none text-gray-800 text-base bg-white"
             />
+
+            <VoiceDictationButton
+              language={dictationLanguage}
+              disabled={loading}
+              onTranscript={(transcript) => setTaskText(current => current ? `${current} ${transcript}` : transcript)}
+            />
+            <p className="-mt-2 text-center text-xs text-gray-500">Нажми микрофон, скажи вопрос, проверь появившийся текст и отправь.</p>
 
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700 text-sm">
